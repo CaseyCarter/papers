@@ -57,9 +57,13 @@ For an implementation that delays initialization to work it must read the initia
 
 * in the copy constructor that initializes `i2` from `i1`. But this is not possible, since [istream.iterator.cons]/5 requires the copy constructor to be trivial when `T` is a trivially copyable (Standard) / literal (Ranges TS) type.
 
-* in the first evaluated dereference operator that reads the value of `i1` or `i2`. For this to work the *second* dereference operator evaluation must see the same value, so there must be some connection between the two iterator objects that is set up in the trivial copy constructor and torn down again in the trivial destructor.
+* in the first evaluated dereference operator that reads the value of `i1` or `i2`. For this to work the *second* dereference operator evaluation must see the same value, so there must be some connection between the two iterator objects that is set up in the trivial copy constructor and torn down again in the trivial destructor. I do not believe that forming such an association between two objects is possible given the constraints that the copy constructor and destructor must be trivial: any external memory/resource used to coordinate communication between the objects must necessarily leak.
+
+On the basis of this argument that a conforming implementation *cannot* delay initialization, we propose to remove the allowance to do so.
 
 ### Technical Specification
+
+
 
 #### Acknowledgments
 
