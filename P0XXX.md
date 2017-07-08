@@ -61,10 +61,151 @@ For an implementation that delays initialization to work it must read the initia
 
 On the basis of this argument that a conforming implementation *cannot* delay initialization, we propose to remove the allowance to do so.
 
-### Technical Specification
+### Technical Specification, C++WP (N4659)
+Strike all but the first sentence of [istream.iterator]/1, and all of paragraph 2:
 
+> 1 The class template `istream_iterator` is an input iterator (27.2.3) that reads (using `operator>>`) successive elements from the input stream for which it was constructed. <del>After it is constructed, and every time `++` is used, the iterator reads and stores a value of `T`. If the iterator fails to read and store a value of `T` (`fail()` on the stream returns `true`), the iterator becomes equal to the *end-of-stream* iterator value. The constructor with no arguments `istream_iterator()` always constructs an end-of-stream input iterator object, which is the only legitimate iterator to be used for the end condition. The result of `operator*` on an end-of-stream iterator is not defined. For any other iterator value a `const T&` is returned. The result of `operator->` on an end-of-stream iterator is not defined. For any other iterator value a `const T*` is returned. The behavior of a program that applies `operator++()` to an end-of-stream iterator is undefined. It is impossible to store things into istream iterators. The type `T` shall meet the `DefaultConstructible`, `CopyConstructible`, and `CopyAssignable` requirements.</del>
+>
+> <del>2 Two end-of-stream iterators are always equal. An end-of-stream iterator is not equal to a non-end-of-stream iterator. Two non-end-of-stream iterators are equal when they are constructed from the same stream.</del>
 
+Add a new paragraph to the end of [istream.iterator], after the class synopsis:
+
+> <ins>-?- The type `T` shall meet the `DefaultConstructible`, `CopyConstructible`, and `CopyAssignable` requirements.</ins>
+
+Modify [istream.iterator.cons] as follows:
+
+> ```c++
+>   constexpr istream_iterator();
+> ```
+> 1 *Effects:* Constructs the end-of-stream iterator<ins>, value-initializing `value`</ins>. If <del>`is_trivially_default_constructible_v<T>` is `true`</del><ins>`T`'s default constructor is a `constexpr` constructor</ins>, then this constructor is a `constexpr` constructor.
+>
+> 2 *Postconditions:* <code>in_stream == <del>0</del><ins>nullptr</ins></code>.
+>
+> ```c++
+>   istream_iterator(istream_type& s);
+> ```
+> 3 *Effects:* Initializes `in_stream` with `addressof(s)`<ins>, value-initializes `value`, and then calls `operator++()`</ins>. <del>`value` may be initialized during construction or the first time it is referenced.</del>
+>
+> <del>4 *Postconditions:* `in_stream == addressof(s)`.</del>
+>
+> [...]
+
+Modify [istream.iterator.ops] as follows:
+
+> ```c++
+>   const T& operator*() const;
+> ````
+> <ins>-?- *Requires:* `in_stream != nullptr`.</ins>
+>
+> 1 *Returns:* `value`.
+>
+> ```c++
+>   const T* operator->() const;
+> ```
+> <ins>-?- *Requires:* `in_stream != nullptr`.</ins>
+>
+> 2 <del*Returns:* `addressof(operator*())`.</del><ins>*Effects:* Equivalent to: `return addressof(operator*());`</ins>
+>
+> ```c++
+>   istream_iterator& operator++();
+> ```
+> 3 *Requires:* <code>in_stream != <del>0</del><ins>nullptr</ins></code>.
+>
+> 4 *Effects:* <del>As if by: `*in_stream >> value;`</del><ins>`if (!(*in_stream >> value)) in_stream = nullptr;`</ins>
+>
+> 5 *Returns:* `*this`.
+>
+> ```c++
+>   istream_iterator operator++(int);
+> ```
+> 6 *Requires:* <code>in_stream != <del>0</del><ins>nullptr</ins></code>.
+>
+> 7 *Effects:* <del>As if by:</del>
+>
+> ```c++
+>   istream_iterator tmp = *this;
+>   <del>*in_stream >> value;</del>
+>   <ins>++*this;</ins>
+>   return <del>(</del>tmp<del>)</del>;
+> ```
+>
+> [...]
+
+### Technical Specification, Ranges TS (N4671)
+> 1 The class template `istream_iterator` is an input iterator (9.3.11) that reads (using `operator>>`) successive elements from the input stream for which it was constructed. <del>After it is constructed, and every time `++` is used, the iterator reads and stores a value of `T`. If the iterator fails to read and store a value of `T` (`fail()` on the stream returns `true`), the iterator becomes equal to the *end-of-stream* iterator value. The constructor with no arguments `istream_iterator()` always constructs an end-of-stream input iterator object, which is the only legitimate iterator to be used for the end condition. The result of `operator*` on an end-of-stream iterator is not defined. For any other iterator value a `const T&` is returned. The result of `operator->` on an end-of-stream iterator is not defined. For any other iterator value a `const T*` is returned. The behavior of a program that applies `operator++()` to an end-of-stream iterator is undefined. It is impossible to store things into istream iterators.</del>
+>
+> <del>2 Two end-of-stream iterators are always equal. An end-of-stream iterator is not equal to a non-end-of-stream iterator. Two non-end-of-stream iterators are equal when they are constructed from the same stream.<del>
+
+Modify [istream.iterator.cons] as follows:
+
+> ```c++
+>   <del>see below</del><ins>constexpr</ins> istream_iterator();
+>   <del>see below</del><ins>constexpr</ins> istream_iterator(default_sentinel);
+> ```
+> 1 *Effects:* Constructs the end-of-stream iterator<ins>, value-initializing `value`</ins>. If <del>`T` is a literal type</del><ins>`T`'s default constructor is a `constexpr` constructor</ins>, then these constructors <del>shall be</del><ins>are</ins> `constexpr` constructors.
+>
+> 2 *Postcondition:* <code>in_stream == <del>0</del><ins>nullptr</ins></code>.
+>
+> ```c++
+>   istream_iterator(istream_type& s);
+> ```
+> 3 *Effects:* Initializes `in_stream` with <del>`&s`</del><ins>`addressof(s)`, value-initializes `value`, and then calls `operator++()`</ins>. <del>`value` may be initialized during construction or the first time it is referenced.</del>
+>
+> <del>4 *Postcondition:* `in_stream == &s`.</del>
+>
+> ```c++
+>   istream_iterator(const istream_iterator& x) = default;
+> ```
+> 5 *Effects:* Constructs a copy of `x`. If <del>`T` is a literal type</del><ins>`is_trivially_copy_constructible<T>::value` is `true`</ins>, then this constructor <del>shall be</del><ins>is</ins> a trivial copy constructor.
+>
+> 6 *Postcondition:* `in_stream == x.in_stream`.
+>
+> ```c++
+>   ~istream_iterator() = default;
+> ```
+> 7 *Effects:* The iterator is destroyed. If <del>`T` is a literal type</del><ins>`is_trivially_destructible<T>::value` is `true`</ins>, then this destructor <del>shall be</del><ins>is</ins> a trivial destructor.
+
+Modify [istream.iterator.ops] as follows:
+
+> ```c++
+>   const T& operator*() const;
+> ````
+> <ins>-?- *Requires:* `in_stream != nullptr`.</ins>
+>
+> 1 *Returns:* `value`.
+>
+> ```c++
+>   const T* operator->() const;
+> ```
+> <ins>-?- *Requires:* `in_stream != nullptr`.</ins>
+>
+> 2 *Effects:* Equivalent to: `return addressof(operator*());`
+>
+> ```c++
+>   istream_iterator& operator++();
+> ```
+> 3 *Requires:* `in_stream != nullptr`.
+>
+> 4 *Effects:* <del>`*in_stream >> value;`</del><ins>`if (!(*in_stream >> value)) in_stream = nullptr;`</ins>
+>
+> 5 *Returns:* `*this`.
+>
+> ```c++
+>   istream_iterator operator++(int);
+> ```
+> 6 *Requires:* `in_stream != nullptr`.
+>
+> 7 *Effects:*
+>
+> ```c++
+>   istream_iterator tmp = *this;
+>   <del>*in_stream >> value;</del>
+>   <ins>++*this;</ins>
+>   return tmp;
+> ```
+>
+> [...]
 
 #### Acknowledgments
 
-I would like to thank Tim Song for pointing out to me that `istream_iterator::operator*` requires the iterator to not be an end-of-stream iterator, and that this requirement is NOT in [istream.iterator.ops] with the specification of `operator*` (where I daresay a sane person might expect it to be) but squirreled away in [istream.iterator]/1.
+I would like to thank Tim Song for pointing out to me that `istream_iterator::operator*` requires the iterator to not be an end-of-stream iterator, and that this requirement is squirreled away in [istream.iterator]/1 and NOT in [istream.iterator.ops] with the specification of `operator*` (where a sane person might expect it to be).
