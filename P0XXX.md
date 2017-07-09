@@ -110,7 +110,7 @@ Modify [istream.iterator.ops] as follows:
 > ```
 > -?- <ins>*Requires:* `in_stream != nullptr`.</ins>
 >
-> 2 <del>Returns:* `addressof(operator*())`.</del><ins>*Effects:* Equivalent to: `return addressof(operator*());`</ins>
+> 2 <del>*Returns:* `addressof(operator*())`.</del><ins>*Effects:* Equivalent to: `return addressof(operator*());`</ins>
 >
 > ```c++
 >   istream_iterator& operator++();
@@ -128,10 +128,9 @@ Modify [istream.iterator.ops] as follows:
 >
 > 7 *Effects:* <del>As if by:</del>
 >
->
-> &nbsp;&nbsp;<code>istream_iterator tmp = *this;</code>
-> &nbsp;&nbsp;<code><del>*in_stream >> value;</del></code>
-> &nbsp;&nbsp;<code><ins>++*this;</ins></code>
+> &nbsp;&nbsp;`istream_iterator tmp = *this;`
+> &nbsp;&nbsp;<del>`*in_stream >> value;`</del>
+> &nbsp;&nbsp;<ins>`++*this;`</ins>
 > &nbsp;&nbsp;<code>return <del>(</del>tmp<del>)</del>;</code>
 >
 > [...]
@@ -148,7 +147,7 @@ Modify [istream.iterator.cons] as follows:
 >
 > 1 *Effects:* Constructs the end-of-stream iterator<ins>, value-initializing `value`</ins>. If <del>`T` is a literal type</del><ins>`T`'s default constructor is a `constexpr` constructor</ins>, then these constructors <del>shall be</del><ins>are</ins> `constexpr` constructors.
 >
-> 2 *Postcondition:* <code>in_stream == <del>0</del><ins>nullptr</ins></code>.
+> 2 *Postcondition:* `in_stream == nullptr`.
 >
 > ```c++
 >   istream_iterator(istream_type& s);
@@ -201,10 +200,10 @@ Modify [istream.iterator.ops] as follows:
 >
 > 7 *Effects:*
 >
-> &nbsp;&nbsp;<code>istream_iterator tmp = *this;</code>
-> &nbsp;&nbsp;<code><del>*in_stream >> value;</del></code>
-> &nbsp;&nbsp;<code><ins>++*this;</ins></code>
-> &nbsp;&nbsp;<code>return tmp;</code>
+> &nbsp;&nbsp;`istream_iterator tmp = *this;`
+> &nbsp;&nbsp;<del>`*in_stream >> value;`</del>
+> &nbsp;&nbsp;<ins>`++*this;`</ins>
+> &nbsp;&nbsp;`return tmp;`
 >
 > [...]
 

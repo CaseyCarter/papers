@@ -75,7 +75,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
   <tr>
     <td width="172" align="left" valign="top">Document number:</td>
     <td width="435">
-      D0XXXR0
+      D0XXXR0A
     </td>
   </tr>
   <tr>
@@ -164,7 +164,7 @@ assert(*i1 == *i2);</code></pre></div>
 <p>1 <em>Returns:</em> <code>value</code>.</p>
 <div class="sourceCode"><pre class="sourceCode cpp"><code class="sourceCode cpp">  <span class="dt">const</span> T* <span class="kw">operator</span>-&gt;() <span class="dt">const</span>;</code></pre></div>
 <p>-?- <ins><em>Requires:</em> <code>in_stream != nullptr</code>.</ins></p>
-<p>2 <del>Returns:* <code>addressof(operator*())</code>.</del><ins><em>Effects:</em> Equivalent to: <code>return addressof(operator*());</code></ins></p>
+<p>2 <del><em>Returns:</em> <code>addressof(operator*())</code>.</del><ins><em>Effects:</em> Equivalent to: <code>return addressof(operator*());</code></ins></p>
 <div class="sourceCode"><pre class="sourceCode cpp"><code class="sourceCode cpp">  istream_iterator&amp; <span class="kw">operator</span>++();</code></pre></div>
 <p>3 <em>Requires:</em> <code>in_stream != <del>0</del><ins>nullptr</ins></code>.</p>
 <p>4 <em>Effects:</em> <del>As if by: <code>*in_stream &gt;&gt; value;</code></del><ins><code>if (!(*in_stream &gt;&gt; value)) in_stream = nullptr;</code></ins></p>
@@ -172,9 +172,9 @@ assert(*i1 == *i2);</code></pre></div>
 <div class="sourceCode"><pre class="sourceCode cpp"><code class="sourceCode cpp">  istream_iterator <span class="kw">operator</span>++(<span class="dt">int</span>);</code></pre></div>
 <p>6 <em>Requires:</em> <code>in_stream != <del>0</del><ins>nullptr</ins></code>.</p>
 <p>7 <em>Effects:</em> <del>As if by:</del></p>
-<p>  <code>istream_iterator tmp = <em>this;</code><br />
-  <code><del></em>in_stream &gt;&gt; value;</del></code><br />
-  <code><ins>++*this;</ins></code><br />
+<p>  <code>istream_iterator tmp = *this;</code><br />
+  <del><code>*in_stream &gt;&gt; value;</code></del><br />
+  <ins><code>++*this;</code></ins><br />
   <code>return <del>(</del>tmp<del>)</del>;</code></p>
 <p>[…]</p>
 </blockquote>
@@ -188,7 +188,7 @@ assert(*i1 == *i2);</code></pre></div>
 <p>  <code><del>see below</del><ins>constexpr</ins> istream_iterator();</code><br />
   <code><del>see below</del><ins>constexpr</ins> istream_iterator(default_sentinel);</code></p>
 <p>1 <em>Effects:</em> Constructs the end-of-stream iterator<ins>, value-initializing <code>value</code></ins>. If <del><code>T</code> is a literal type</del><ins><code>T</code>’s default constructor is a <code>constexpr</code> constructor</ins>, then these constructors <del>shall be</del><ins>are</ins> <code>constexpr</code> constructors.</p>
-<p>2 <em>Postcondition:</em> <code>in_stream == <del>0</del><ins>nullptr</ins></code>.</p>
+<p>2 <em>Postcondition:</em> <code>in_stream == nullptr</code>.</p>
 <div class="sourceCode"><pre class="sourceCode cpp"><code class="sourceCode cpp">  istream_iterator(istream_type&amp; s);</code></pre></div>
 <p>3 <em>Effects:</em> Initializes <code>in_stream</code> with <del><code>&amp;s</code></del><ins><code>addressof(s)</code>, value-initializes <code>value</code>, and then calls <code>operator++()</code></ins>. <del><code>value</code> may be initialized during construction or the first time it is referenced.</del></p>
 <p>4 <del><em>Postcondition:</em> <code>in_stream == &amp;s</code>.</del></p>
@@ -213,9 +213,9 @@ assert(*i1 == *i2);</code></pre></div>
 <div class="sourceCode"><pre class="sourceCode cpp"><code class="sourceCode cpp">  istream_iterator <span class="kw">operator</span>++(<span class="dt">int</span>);</code></pre></div>
 <p>6 <em>Requires:</em> <code>in_stream != nullptr</code>.</p>
 <p>7 <em>Effects:</em></p>
-<p>  <code>istream_iterator tmp = <em>this;</code><br />
-  <code><del></em>in_stream &gt;&gt; value;</del></code><br />
-  <code><ins>++*this;</ins></code><br />
+<p>  <code>istream_iterator tmp = *this;</code><br />
+  <del><code>*in_stream &gt;&gt; value;</code></del><br />
+  <ins><code>++*this;</code></ins><br />
   <code>return tmp;</code></p>
 <p>[…]</p>
 </blockquote>

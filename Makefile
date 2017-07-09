@@ -1,5 +1,5 @@
 DOCNO = 0XXX
-REV = 0
+REV = 0A
 PD = D
 SOURCE = P0XXX.md
 TARGET = $(PD)$(DOCNO)R$(REV)
