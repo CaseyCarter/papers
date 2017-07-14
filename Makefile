@@ -1,6 +1,6 @@
 DOCNO = 0738
-REV = 0
-PD = P
+REV = 1
+PD = D
 SOURCE = P0XXX.md
 TARGET = $(PD)$(DOCNO)R$(REV)
 
