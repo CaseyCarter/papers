@@ -1,7 +1,7 @@
-DOCNO = 0XXX
+DOCNO = 0899
 REV = 0
 PD = D
-SOURCE = LWG3016.md
+SOURCE = P$(DOCNO).md
 TARGET = $(PD)$(DOCNO)R$(REV)
 
 PANDOC = pandoc
