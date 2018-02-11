@@ -1,10 +1,10 @@
 <style type="text/css">
 ins {
-  background-color: lime; text-decoration:underline;
+  color:#009a9a; text-decoration:underline;
 }
 
 del {
-  background-color: #ff8080; text-decoration:line-through;
+  color:red; text-decoration:line-through;
 }
 
 ednote {
@@ -22,5 +22,4 @@ table, th, td {
 code.diff > span.st {
   color: darkred;
 }
-
 </style>
