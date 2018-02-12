@@ -7,6 +7,7 @@ PANDOC_FMT = markdown_github+yaml_metadata_block+citations+smart
 $(TARGET).html: $(SOURCE) header.html pandoc-template.html ../pandoc.css
 	$(PANDOC) -f $(PANDOC_FMT) -t html -o $@ --filter pandoc-citeproc --csl=../acm-sig-proceedings.csl -s --template=pandoc-template --include-before-body=header.html --include-in-header=../pandoc.css $<
 
+# FIXME
 $(TARGET).pdf: $(SOURCE)
 	$(PANDOC) -f $(PANDOC_FMT) -t latex -o $@ --filter pandoc-citeproc --csl=../acm-sig-proceedings.csl -s $<
 
