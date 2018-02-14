@@ -1,22 +1,18 @@
 <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse" bordercolor="#111111" width="607">
   <tr>
     <td width="172" align="left" valign="top">Document number:</td>
-    <td width="435">
-      %%DOCNO%%
-    </td>
+    <td width="435">%%DOCNO%%</td>
   </tr>
   <tr>
     <td width="172" align="left" valign="top">Date:</td>
-    <td width="435">2017-07-07</td>
+    <td width="435">%%DATE%%</td>
   </tr>
   <tr>
     <td width="172" align="left" valign="top">Project:</td>
-    <td width="435">C++ Programming Language and C++ Extensions for Ranges, Library Working Group</td>
+    <td width="435">%%AUDIENCE%%</td>
   </tr>
   <tr>
     <td width="172" align="left" valign="top">Reply-to:</td>
-    <td width="435">
-      Casey Carter &lt;<a href="mailto:Casey@Carter.net">Casey@Carter.net</a>&gt;<br>
-    </td>
+    <td width="435">%%AUTHOR%%</td>
   </tr>
 </table>
