@@ -8,6 +8,10 @@ AUTHOR ?= Casey Carter \&lt;<a href="mailto:Casey@Carter.net">Casey@Carter.net<\
 DATE ?= $(shell date --iso-8601)
 HEADER ?= ../header.html.in
 
+ifndef AUDIENCE
+$(error AUDIENCE is not defined.)
+endif
+
 $(TARGET).html: $(SOURCE) header.html ../pandoc-template.html ../pandoc.css
 	$(PANDOC) -f $(PANDOC_FMT) -t html -o $@ --filter pandoc-citeproc --csl=../acm-sig-proceedings.csl -s --template=../pandoc-template --include-before-body=header.html --include-in-header=../pandoc.css $<
 
