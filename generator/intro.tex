@@ -1,0 +1,183 @@
+\rSec0[intro.scope]{Scope}
+
+\begin{quote}
+``Eventually, all things merge into one, and a river runs through it.''
+\begin{flushright}
+\textemdash \textit{Norman Maclean}
+\end{flushright}
+\end{quote}
+
+\pnum
+This document proposes to merge the ISO/IEC TS 21425:2017, aka the Ranges TS,
+into the working draft. This document is intended to be taken in conjunction with
+P0898, a paper which proposes importing the definitions of the Ranges TS's Concepts
+library (Clause 7) into namespace \tcode{std}.
+
+\rSec1[intro.history]{Revision History}
+\rSec2[intro.history.r1]{Revision 1}
+\begin{itemize}
+\item Remove section [std2.numerics] which is incorporated into P0898.
+
+\item Do not propose \tcode{ranges::exchange}: it is not used in the Ranges TS.
+
+\item Rewrite nearly everything to merge into \tcode{std::ranges} rather than
+  into \tcode{std2}:
+  \begin{itemize}
+  \item Occurrences of "std2." in stable names are either removed, or replaced with
+    "range" when the name resulting from removal would conflict with an existing
+    stable name.
+  \end{itemize}
+
+\item Incorporate the \tcode{std2::swap} customization point from P0898R0 as
+\tcode{ranges::swap}. (This was necessarily dropped from P0898R1.) Perform the
+necessary surgery on the \tcode{Swappable} concept from P0898R1 to restore the
+intended design that uses the renamed customization point.
+
+\end{itemize}
+
+\rSec0[intro]{General Principles}
+
+\rSec1[intro.goals]{Goals}
+
+\pnum
+The primary goal of this proposal is to deliver high-quality, constrained generic
+Standard Library components at the same time that the language gets support for
+such components.
+
+\rSec1[intro.rationale]{Rationale}
+
+\pnum
+The best, and arguably only practical way to achieve the goal stated above is by
+incorporating the Ranges TS into the working paper. The sooner we can agree on
+what we want ``\tcode{Iterator}'' and ``\tcode{Range}'' to mean going forward
+(for instance), and the sooner users are able to rely on them, the sooner we can
+start building and delivering functionality on top of those fundamental
+abstractions. (For example, see ``P0789: Range Adaptors and
+Utilities''~(\cite{P0789}).)
+
+\pnum
+The cost of not delivering such a set of Standard Library concepts
+and algorithms is that users will either do without or create a babel of mutually
+incompatible concepts and algorithms, often without the rigour followed by the
+Ranges TS. The experience of the authors and implementors of the Ranges TS is that
+getting concept definitions and algorithm constraints right is \textit{hard}. The
+Standard Library should save its users from needless heartache.
+
+\rSec1[intro.risks]{Risks}
+
+\pnum
+Shipping constrained components from the Ranges TS in the C++20 timeframe is not
+without risk. As of the time of writing (February 1, 2018), no major Standard
+Library vendor has shipped an implementation of the Ranges TS. Two of the three
+major compiler vendors have not even shipped an implementation of the concepts
+language feature. Arguably, we have not yet gotten the usage experience for which
+all Technical Specifications are intended.
+
+\pnum
+On the other hand, the components of Ranges TS have been vetted very thoroughly
+by the range-v3~(\cite{range-v3}) project, on which the Ranges TS is based. There is
+no part of the Ranges TS -- concepts included -- that has not seen extensive use
+via range-v3. (The concepts in range-v3 are emulated with high fidelity through
+the use of generalized SFINAE for expressions.) As an Open Source project, usage
+statistics are hard to come by, but the following may be indicitive:
+
+\begin{itemize}
+\item The range-v3 GitHub project has over 1,400 stars, over 120 watchers, and
+145 forks.
+\item It is cloned on average about 6,000 times a month.
+\item A GitHub search, restricted to C++ files, for the string
+``\tcode{range/v3}'' (a path component of all of range-v3's header files), turns
+up over 7,000 hits.
+\end{itemize}
+
+\pnum
+Lacking true concepts, range-v3 cannot emulate concept-based function
+overloading, or the sorts of constraints-checking short-circuit evaluation
+required by true concepts. For that reason, the authors of the Ranges TS have
+created a reference implementation: CMCSTL2~(\cite{cmcstl2}) using true concepts. To
+this reference implementation, the authors ported all of range-v3's tests. These
+exposed only a handful of concepts-specific bugs in the components of the Ranges
+TS (and a great many more bugs in compilers). Those improvements were back-ported
+to range-v3 where they have been thoroughly vetted over the past 2 years.
+
+\pnum
+In short, concern about lack of implementation experience should not be a reason
+to withhold this important Standard Library advance from users.
+
+\rSec1[intro.methedology]{Methodology} %FIXME
+
+\pnum
+The contents of the Ranges TS, Clause 7 (``Concepts library'') are proposed
+for namespace \tcode{std} by P0898, ``Standard Library Concepts''~(\cite{P0898}).
+Additionally, P0898 proposes the \tcode{identity} function
+object~(\tsref{func.identity}) and the \tcode{common_reference} type
+trait~(\tsref{meta.trans.other}) for namespace \tcode{std}. The changes proposed by
+the Ranges TS to \tcode{common_type} are merged into the working paper (also
+by P0898). The ``\tcode{invoke}'' function and the ``\tcode{swappable}'' type
+traits (e.g., \tcode{is_swappable_with}) already exist in the text of the
+working paper, so they are omitted here.
+
+\pnum
+The salient, high-level features of this proposal are as follows:
+
+\begin{itemize}
+\item The remaining library components in the Ranges TS are proposed for
+namespace \tcode{::std::ranges}.
+
+\item The text of the Ranges TS is rebased on the latest working draft.
+
+\item Structurally, this paper proposes to specify each piece of \tcode{std::ranges}
+alongside the content of \tcode{std} from the same header. Since some Ranges
+TS components reuse names that previously had meaning in the C++ Standard, we
+sometimes rename old content to avoid name collisions.
+
+\item The content of headers from the Ranges TS with the same base name as a
+standard header are merged into that standard header. For example, the content
+of \tcode{<experimental/ranges/iterator>} will be merged into \tcode{<iterator>}.
+The new header \tcode{<experimental/ranges/range>} will be added under the name
+\tcode{<range>}.
+
+\item The Concepts Library clause, proposed by P0898, is located in that paper
+between the ``Language Support Library'' and the ``Diagnostics library''. In the
+organization proposed by this paper, that places it as subclause 20.3. This paper
+refers to it as such. FIXME
+
+\item Where the text of the Ranges TS needs to be updated, the text is presented
+with change markings: \removed{red strikethrough} for removed text and
+\added{blue underline} for added text. FIXME
+
+\item The stable names of everything in the Ranges TS, clauses 6, 8-12 are
+changed by preprending ``\tcode{range.}''. References are updated accordingly.
+\end{itemize}
+
+\rSec1[intro.style]{Style of presentation}
+
+\pnum
+The remainder of this document is a technical specification in the form of
+editorial instructions directing that changes be made to the text of the C++
+working draft. The formatting of the text suggests the origin of each portion of
+the wording.
+
+Existing wording from the C++ working draft - included to provide context - is
+presented without decoration.
+
+\begin{addedblock}
+Entire clauses / subclauses / paragraphs incorporated from the Ranges TS are
+presented in a distinct cyan color.
+\end{addedblock}
+
+\added{In-line additions of wording from the Ranges TS to the C++ working draft
+are presented in cyan with underline.}
+
+\removed{In-line bits of wording that the Ranges TS strikes from the C++ working
+draft are presented in red with strike-through.}
+
+\newtxt{Wording to be added which is original to this document appears in gold
+with underline.}
+
+\oldtxt{Wording which this document strikes is presented in magenta with
+strikethrough. (Hopefully context makes it clear whether the wording is currently
+in the C++ working draft, or wording that is not being added from the Ranges TS.)}
+
+Ideally, these formatting conventions make it clear which wording comes from
+which document in this three-way merge.

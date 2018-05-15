@@ -1,0 +1,70 @@
+\setcounter{chapter}{22}
+\setcounter{table}{33}
+\ednote{Add a new clause with the following content:}
+\rSec0[utilities]{General utilities library}
+
+Add the subclause "Coroutine generators" with header \tcode{<experimental/generator>} to \tref{tab:util.lib.summary}.
+
+\begin{libsumtab}{General utilities library summary}{tab:util.lib.summary}
+\cxxref{utility}           & Utility components                & \tcode{<utility>}                        \\ \rowsep
+\cxxref{intseq}            & Compile-time integer sequences    & \tcode{<utility>}                        \\ \rowsep
+\cxxref{pairs}             & Pairs                             & \tcode{<utility>}                        \\ \rowsep
+\cxxref{tuple}             & Tuples                            & \tcode{<tuple>}                          \\ \rowsep
+\cxxref{optional}          & Optional objects                  & \tcode{<optional>}                       \\ \rowsep
+\cxxref{variant}           & Variants                          & \tcode{<variant>}                        \\ \rowsep
+\cxxref{any}               & Storage for any type              & \tcode{<any>}                            \\ \rowsep
+\cxxref{bitset}            & Fixed-size sequences of bits      & \tcode{<bitset>}                         \\ \rowsep
+\cxxref{memory}            & Memory                            & \tcode{<memory>}                         \\
+                           &                                   & \tcode{<cstdlib>}                        \\ \rowsep
+\cxxref{smartptr}          & Smart pointers                    & \tcode{<memory>}                         \\ \rowsep
+\cxxref{mem.res}           & Memory resources                  & \tcode{<memory_resource>}                \\ \rowsep
+\cxxref{allocator.adaptor} & Scoped allocators                 & \tcode{<scoped_allocator>}               \\ \rowsep
+\cxxref{function.objects}  & Function objects                  & \tcode{<functional>}                     \\ \rowsep
+\cxxref{meta}              & Type traits                       & \tcode{<type_traits>}                    \\ \rowsep
+\cxxref{ratio}             & Compile-time rational arithmetic  & \tcode{<ratio>}                          \\ \rowsep
+\cxxref{time}              & Time utilities                    & \tcode{<chrono>}                         \\
+                           &                                   & \tcode{<ctime>}                          \\ \rowsep
+\cxxref{type.index}        & Type indexes                      & \tcode{<typeindex>}                      \\ \rowsep
+\cxxref{execpol}           & Execution policies                & \tcode{<execution>}                      \\ \rowsep
+\cxxref{charconv}          & Primitive numeric conversions     & \tcode{<charconv>}                       \\ \rowsep
+\added{\ref{generator}}    & \added{Coroutine generators}      & \tcode{\added{<experimental/generator>}} \\
+\end{libsumtab}
+
+\setcounter{section}{20}
+\rSec1[generator]{Coroutine generators}
+Add this subclause to Clause~\ref{utilities}.
+\rSec2[generator.syn]{Header \tcode{<experimental/generator>} synopsis}
+\begin{codeblock}
+namespace std::experimental { inline namespace coroutines_v1 {
+  template<class Reference, class Value = remove_cv_t<remove_reference_t<Reference>>>
+  class generator {
+  public:
+    constexpr generator() noexcept;
+    generator(generator&&) noexcept;
+    ~generator();
+
+    generator& operator=(generator&&) noexcept;
+
+    @\seebelow@ begin();
+    ranges::default_sentinel end() const noexcept;
+
+    friend void swap(generator&, generator&) noexcept;
+
+  private:
+    coroutine_handle<> handle_; // \expos
+  };
+
+  enum class generator_size_t : std::ptrdiff_t {};
+
+  template<class Reference, class Value = remove_cv_t<remove_reference_t<Reference>>>
+  class sized_generator : generator<Reference, Value> {
+  public:
+    constexpr sized_generator() noexcept;
+
+    std::ptrdiff_t size() const;
+
+  private:
+    std::ptrdiff_t size_; // \expos
+  };
+}}
+\end{codeblock}
