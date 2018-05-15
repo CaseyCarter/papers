@@ -1,1 +1,12 @@
-[DP]1057*.pdf
+P1057.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.toc
+*.out
+*.log
