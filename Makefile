@@ -28,7 +28,7 @@ clean:
 	rm -f header.html $(TARGET).html $(TARGET).pdf *~
 
 view: $(TARGET).html
-	gnome-www-browser $(TARGET).html
+	gnome-www-browser $(TARGET).html || cmd.exe /c start $(TARGET).html
 
 cooked.txt: raw.txt
 	sed -rf ../cook < $< > $@ || rm -f $@
