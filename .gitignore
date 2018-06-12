@@ -1,3 +1,20 @@
+# Outputs
 *.html
+*.pdf
+
+# Latex intermediates
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.ffs
+*.fls
+*.idx
+*.ilg
+*.ind
+*.log
+*.out
+*.toc
+
 raw.txt
 cooked.txt
