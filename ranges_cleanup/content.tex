@@ -6,6 +6,10 @@ up during LWG review of P0896 ``The One Ranges Proposal''~(\cite{P0896}).
 All wording sections herein are relative to the combination of N4762 and P0896R3.
 
 \rSec1[intro.history]{Revision History}
+\rSec2[intro.history.r1]{Revision 1}
+\begin{itemize}
+\item New change proposal: split \tcode{<iterator>} and \tcode{<ranges>}.
+\end{itemize}
 \rSec2[intro.history.r0]{Revision 0}
 \begin{itemize}
 \item In the beginning, all was \cv-\tcode{void}. Suddenly, a proposal emerged
@@ -1023,6 +1027,54 @@ namespace std {
 \end{addedblock}
 \end{quote}
 
+
+\setcounter{chapter}{7}
+\rSec0[sub.headers]{Headers \tcode{iterator_}- and \tcode{range_concepts}}
+
+When defining an iterator/container/algorithm it's extremely likely that I need
+the iterator/range concepts/traits/operations in the
+\tcode{<iterator>}/\tcode{<ranges>} headers, but substantially less likely that I
+need the iterator/range adaptors. Indeed, while the ``support machinery'' in
+these headers is static, the set of useful adaptors is effectively unbounded and
+will grow over time as more are proposed.
+
+In the interests of reducing the cost of transitive includes that my
+iterator/container/algorithm header imposes on users, it would be useful if the
+support machinery in \tcode{<iterator>}/\tcode{<ranges>} were split out into
+separate \tcode{<iterator_support>}/\tcode{<ranges_support>}
+(\tcode{<_base>}? \tcode{<_concepts>}?) headers which the base
+headers include.
+
+\rSec1[sub.headers.words]{Technical specifications}
+
+Split [iterator.synopsis] between the ``range iterator operations'' and
+``predefined iterators and sentinels'', naming the new first subclause
+``Header \tcode{<iterator_support>} synopsis'' with stable name
+[iterator.support.syn]. At what is now the beginning of the \tcode{<iterator>}
+synopsis, add \tcode{\#include <iterator_support>}.
+
+Similarly split [range.syn] between the declarations of the \tcode{all_view}
+alias and the \tcode{filter_view} view adaptor, naming the new first subclause
+``Header \tcode{<ranges_support>} synopsis'' with stable name
+[range.support.syn]. At what is now the beginning of the \tcode{<ranges>}
+synopsis, add \tcode{\#include <ranges_support>}. Relocate the declarations
+directly in namespace \tcode{std} from \tcode{<ranges>}:
+\begin{codeblock}
+  namespace view = ranges::view;
+
+  template<class I, class S, ranges::subrange_kind K>
+  struct tuple_size<ranges::subrange<I, S, K>>
+    : integral_constant<size_t, 2> {};
+  template<class I, class S, ranges::subrange_kind K>
+  struct tuple_element<0, ranges::subrange<I, S, K>> {
+    using type = I;
+  };
+  template<class I, class S, ranges::subrange_kind K>
+  struct tuple_element<1, ranges::subrange<I, S, K>> {
+    using type = S;
+  };
+\end{codeblock}
+to the end of \tcode{<ranges_support>}.
 
 % \rSec0[]{Move \tcode{Incrementable} into \tcode{<concepts>}}
 % How do we extract \tcode{iter_difference_t} from \tcode{iterator_traits}?
