@@ -1076,5 +1076,21 @@ directly in namespace \tcode{std} from \tcode{<ranges>}:
 \end{codeblock}
 to the end of \tcode{<ranges_support>}.
 
+
+\rSec0[isw]{Rename \libconcept{IndirectlySwappable}}
+
+\href{https://wg21.link/p0898r3}{P0898R3 ``Standard Library Concepts''}
+established a convention that symmetric two-parameter concepts -
+concepts such that \tcode{C<T, U> == C<U, T>} -
+have names that end in \tcode{With}. P0896's \libconcept{IndirectlySwappable} is
+such a concept. While \libconcept{IndirectlySwappableWith} is a lot to type,
+changing it would be consistent with the convention.
+
+\rSec1[isw.words]{Technical specifications}
+
+Change all occurrences of the name \libconcept{IndirectlySwappable} to
+\libconcept{IndirectlySwappableWith}.
+
+
 % \rSec0[]{Move \tcode{Incrementable} into \tcode{<concepts>}}
 % How do we extract \tcode{iter_difference_t} from \tcode{iterator_traits}?
