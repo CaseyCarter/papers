@@ -642,24 +642,44 @@ behavior is \tcode{correct}, it is likely to exhibit poor performance.
 
 We propose that the effect of \tcode{view::reverse(r)} when \tcode{r} is an
 instance of \tcode{reverse_view} should be to simply return the underlying view
-directly. This behavior is both simple to specify and efficient to implement
-(see \href{https://github.com/CaseyCarter/cmcstl2/compare/reverse_reverse}{cmcstl2/compare/reverse_reverse}).
+directly. This behavior is both simple to specify and efficient to implement.
+
+Similarly, reversing a \tcode{subrange} whose iterator and sentinel are
+\tcode{reverse_iterator}s can be made more efficient by yielding a
+\tcode{subrange} of "unwrapped" iterators. Note that in this case we should
+take care to preserve any stored size information in the original subrange,
+since the size of the unwrapped base range is the same.
 
 \rSec1[sdrow.weiv_esrever]{Technical specifications}
 
 \begin{itemize}
 \item Modify the specification of \tcode{view::reverse} in
-  [range.adaptors.reverse] as follows:
+  [range.reverse.adaptor] as follows:
   \begin{quote}
 \pnum
 The name \tcode{view::reverse} denotes a
-range adaptor object\cxxiref{range.adaptor.object}. The expression
-\tcode{view::reverse(E)} for some subexpression \tcode{E} is
-expression-equivalent to\added{:} \tcode{\removed{reverse_view\{E\}}}\removed{.}
+range adaptor object\cxxiref{range.adaptor.object}.
+For some subexpression \tcode{E}, the expression
+\tcode{view::reverse(E)} is expression-equivalent to\added{:}
+\tcode{\removed{reverse_view\{E\}}}\removed{.}
 \begin{addedblock}
 \begin{itemize}
 \item If the type of \tcode{E} is a cv-qualified specialization of
   \tcode{reverse_view}, \tcode{E.base()}.
+\item Otherwise, if the type of \tcode{E} is cv-qualified
+  \begin{codeblock}
+  subrange<reverse_iterator<I>, reverse_iterator<I>, K>
+  \end{codeblock}
+  for some iterator type \tcode{I} and
+  value \tcode{K} of \tcode{subrange_kind},
+  \begin{codeblock}
+  subrange<I, I, K>(E.end().base(), E.begin().base(), E.size())
+  \end{codeblock}
+  if \tcode{K} is \tcode{subrange_kind::sized} and
+  \begin{codeblock}
+  subrange<I, I, K>(E.end().base(), E.begin().base())
+  \end{codeblock}
+  otherwise, except that in either case \tcode{E} is evaluated only once.
 \item Otherwise, \tcode{reverse_view\{E\}}.
 \end{itemize}
 \end{addedblock}
