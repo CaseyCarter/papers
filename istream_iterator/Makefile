@@ -1,5 +1,5 @@
 DOCNO = 0738
-REV = 1A
-PD = D
-AUDIENCE = C++ Programming Language and C++ Extensions for Ranges, Library Working Group
+REV = 1
+PD = P
+AUDIENCE = C++ Programming Language, Library Working Group
 include ../Makefile
