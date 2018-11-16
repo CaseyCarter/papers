@@ -3,12 +3,17 @@
 This paper proposes several small, independent design tweaks to Ranges that came
 up during LWG review of P0896 ``The One Ranges Proposal''~(\cite{P0896}).
 
-All wording sections herein are relative to the combination of N4762 and P0896R3.
+All wording sections herein are relative to the post-San Diego working draft.
 
 \rSec1[intro.history]{Revision History}
 \rSec2[intro.history.r1]{Revision 1}
 \begin{itemize}
-\item New change proposal: split \tcode{<iterator>} and \tcode{<ranges>}.
+\item Rebase wording onto post-San Diego working draft.
+\item Strike section that suggested making the exposition-only concepts
+  in \cxxref{special.mem.concepts} available to users; this part of the proposal
+  did not have consensus in LEWG.
+\item Update \tcode{safe_subrange_t} to account for potential \tcode{dangling}
+  as well.
 \end{itemize}
 \rSec2[intro.history.r0]{Revision 0}
 \begin{itemize}
@@ -56,7 +61,7 @@ namespace std {
     @\removed{constexpr pointer operator->() const;}@
 
     constexpr move_iterator& operator++();
-    constexpr decltype(auto) operator++(int);
+    constexpr auto operator++(int);
     [...]
   };
 }
@@ -87,7 +92,8 @@ constexpr reference operator[](difference_type n) const;
 \pnum \effects Equivalent to: \tcode{ranges::iter_move(current + n);}
 \end{itemdescr}
   \end{quote}
-  to a new subclause ``Deprecated \tcode{move_iterator} access'' in Annex D:
+  to a new subclause ``Deprecated \tcode{move_iterator} access'' in Annex D
+  between \cxxref{depr.iterator.primitives} and \cxxref{depr.util.smartptr.shared.atomic}:
   \begin{quote}
   \begin{addedblock}
 \setcounter{Paras}{0}
@@ -117,8 +123,8 @@ constexpr pointer operator->() const;
 \rSec0[ref]{\placeholder{ref-view} => \tcode{ref_view}}
 
 The authors of P0896 added the exposition-only view type \placeholder{ref-view}
-(P0896R3 [range.view.ref]) to serve as the return type of  \tcode{view::all}
-([range.adaptors.all]) when passed an lvalue container.
+(P0896R4 \cxxref{range.view.ref}) to serve as the return type of  \tcode{view::all}
+(\cxxref{range.adaptors.all}) when passed an lvalue container.
 \tcode{\placeholder{ref-view}<T>} is an ``identity view adaptor'' --
 an adaptor which produces a view containing all the elements of the underlying
 range exactly -- of a \libconcept{Range} of type \tcode{T} whose representation
@@ -165,13 +171,13 @@ by \tcode{view::all}, but users may like to use it as well as a sort of "Ranges
 
 \begin{itemize}
 \item Update references to the name \placeholder{ref-view} to
-  \tcode{ref_view} in [range.adaptors.all]/2:
+  \tcode{ref_view} in \cxxref{range.adaptors.all}/2:
   \begin{quote}
 \setcounter{Paras}{1}
 \pnum
 The name \tcode{view::all} denotes a range adaptor
-object\cxxiref{range.adaptor.object}. The expression \tcode{view::all(E)} for
-some subexpression \tcode{E} is expression-equivalent to:
+object\cxxiref{range.adaptor.object}. For some subexpression \tcode{E},
+the expression \tcode{view::all(E)} is expression-equivalent to:
 
 \begin{itemize}
 \item \tcode{\placeholdernc{DECAY_COPY}(E)} if the decayed type of \tcode{E}
@@ -182,132 +188,64 @@ models \libconcept{View}.
 expression is well-formed\removed{, where \tcode{\placeholder{ref-view}}
 is the exposition-only \libconcept{View} specified below}.
 
-\item Otherwise, \tcode{subrange\{E\}} if that expression is well-formed.
-
-\item Otherwise, \tcode{view::all(E)} is ill-formed.
+\item Otherwise, \tcode{subrange\{E\}}.
 \end{itemize}
 
   \end{quote}
-\item Retitle [ref.view] to ``class template \tcode{ref_view}'' and modify as
+\item Change the stable name \cxxref{range.view.ref} to [range.ref.view] (for consistency with the stable names of the other view classes defined in \cxxref{range}), retitle to ``class template \tcode{ref_view}'' and modify as
   follows:
   \begin{quote}
+\setcounter{Paras}{0}
+\pnum
+\tcode{\added{ref_view}}\added{ is a \libconcept{View} of the elements of some other \libconcept{Range}.}
+
 \begin{codeblock}
 namespace std::ranges {
   template<Range R>
-    requires std::is_object_v<R>
+    requires is_object_v<R>
   class @\changed{\placeholder{ref_view}}{ref_view}@ : public view_interface<@\changed{\placeholder{ref_view}}{ref_view}@<R>> {
   private:
     R* r_ = nullptr; // \expos
   public:
     constexpr @\changed{\placeholder{ref_view}}{ref_view}@() noexcept = default;
-    constexpr @\changed{\placeholder{ref_view}}{ref_view}@(R& r) noexcept;
+
+    template<@\placeholder{not-same-as}<\changed{\placeholder{ref-view}}{ref_view}@> T>
+      requires @\seebelow@
+    constexpr @\changed{\placeholder{ref_view}}{ref_view}@(T&& t);
 
     constexpr R& base() const;
 
-    constexpr iterator_t<R> begin() const
-      noexcept(noexcept(ranges::begin(*r_)));
-    constexpr sentinel_t<R> end() const
-      noexcept(noexcept(ranges::end(*r_)));
+    constexpr iterator_t<R> begin() const { return ranges::begin(*r_); }
+    constexpr sentinel_t<R> end() const { return ranges::end(*r_); }
 
     constexpr bool empty() const
-      noexcept(noexcept(ranges::empty(*r_)))
-      requires requires { ranges::empty(*r_); };
+      requires requires { ranges::empty(*r_); }
+    { return ranges::empty(*r_); }
 
-    constexpr auto size() const
-      noexcept(noexcept(ranges::size(*r_)))
-      requires SizedRange<R>;
+    constexpr auto size() const requires SizedRange<R>
+    { return ranges::size(*r_); }
 
-    constexpr auto data() const
-      noexcept(noexcept(ranges::data(*r_)))
-      requires ContiguousRange<R>;
+    constexpr auto data() const requires ContiguousRange<R>
+    { return ranges::data(*r_); }
 
-    friend constexpr iterator_t<R> begin(@\changed{\placeholder{ref_view}}{ref_view}@&& r)
-      noexcept(noexcept(r.begin()));
-    friend constexpr sentinel_t<R> end(@\changed{\placeholder{ref_view}}{ref_view}@&& r)
-      noexcept(noexcept(r.end()));
+    friend constexpr iterator_t<R> begin(@\changed{\placeholder{ref_view}}{ref_view}@ r)
+    { return r.begin(); }
+
+    friend constexpr sentinel_t<R> end(@\changed{\placeholder{ref_view}}{ref_view}@ r)
+    { return r.end(); }
   };
 }
 \end{codeblock}
-  \end{quote}
-\item Similarly change the class template name in the detailed specification of
-  the operations in [range.view.ref.ops]:
-  \begin{quote}
+
 \setcounter{Paras}{0}
 \begin{itemdecl}
-constexpr @\changed{\placeholdernc{ref_view}}{ref_view}@(R& r) noexcept;
+template<@\placeholder{not-same-as}<\changed{\placeholder{ref-view}}{ref_view}@> T>
+  requires @\seebelow@
+constexpr @\changed{\placeholder{ref_view}}{ref_view}@(T&& t);
 \end{itemdecl}
 
 \begin{itemdescr}
-\pnum
-\effects Initializes \tcode{r_} with \tcode{addressof(r)}.
-\end{itemdescr}
-
-\begin{itemdecl}
-constexpr R& base() const;
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\effects Equivalent to: \tcode{return *r_;}
-\end{itemdescr}
-
-\begin{itemdecl}
-constexpr iterator_t<R> begin() const
-  noexcept(noexcept(ranges::begin(*r_)));
-friend constexpr iterator_t<R> begin(@\changed{\placeholder{ref_view}}{ref_view}@&& r)
-  noexcept(noexcept(r.begin()));
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\effects Equivalent to: \tcode{return ranges::begin(*r_);}
-or \tcode{return r.begin();}, respectively.
-\end{itemdescr}
-
-\begin{itemdecl}
-constexpr sentinel_t<R> end() const
-  noexcept(noexcept(ranges::end(*r_)));
-friend constexpr sentinel_t<R> end(@\changed{\placeholder{ref_view}}{ref_view}@&& r)
-  noexcept(noexcept(r.end()));
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\effects Equivalent to: \tcode{return ranges::end(*r_);}
-or \tcode{return r.end();}, respectively.
-\end{itemdescr}
-
-\begin{itemdecl}
-constexpr bool empty() const
-  noexcept(noexcept(ranges::empty(*r_)))
-  requires requires { ranges::empty(*r_); };
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\effects Equivalent to: \tcode{return ranges::empty(*r_);}
-\end{itemdescr}
-
-\begin{itemdecl}
-constexpr auto size() const
-  noexcept(noexcept(ranges::size(*r_)))
-  requires SizedRange<R>;
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\effects Equivalent to: \tcode{return ranges::size(*r_);}
-\end{itemdescr}
-
-\begin{itemdecl}
-constexpr auto data() const
-  noexcept(noexcept(ranges::data(*r_)))
-  requires ContiguousRange<R>;
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\effects Equivalent to: \tcode{return ranges::data(*r_);}
+[...]
 \end{itemdescr}
   \end{quote}
 \end{itemize}
@@ -334,8 +272,8 @@ prior \tcode{void} specializations.
 
 \rSec1[untemp.words]{Technical specifications}
 
-In [functional.syn], modify the declarations of the comparison function objects
-as follows:
+In [functional.syn], modify the declarations of the \tcode{ranges}
+comparison function objects as follows:
 \begin{codeblock}
   [...]
 
@@ -376,7 +314,7 @@ as follows:
   [...]
 \end{codeblock}
 
-Update the specifications in [range.comparisons] as well:
+Update the specifications in \cxxref{range.comparisons} as well:
 
 \setcounter{Paras}{1}
 \pnum
@@ -625,7 +563,7 @@ Strip \tcode{<>} from occurrences of \tcode{ranges::equal_to<>},
 [alg.remove], [alg.unique], [sort], [stable.sort], [partial.sort],
 [partial.sort.copy], [is.sorted], [alg.nth.element], [lower.bound],
 [upper.bound], [equal.range], [binary.search], [alg.merge], [includes],
-[set.union], [set.intersection], [set.difference], [set.symmetric.difference],
+[set.union], [set.intersection], [set.difference], [set.symmetr\-ic.difference],
 [push.heap], [pop.heap], [make.heap], [sort.heap], [is.heap], [alg.min.max],
 [alg.lex.comparison], and [alg.permutation.generators].
 
@@ -654,7 +592,7 @@ since the size of the unwrapped base range is the same.
 
 \begin{itemize}
 \item Modify the specification of \tcode{view::reverse} in
-  [range.reverse.adaptor] as follows:
+  \cxxref{range.reverse.adaptor} as follows:
   \begin{quote}
 \pnum
 The name \tcode{view::reverse} denotes a
@@ -685,249 +623,6 @@ For some subexpression \tcode{E}, the expression
 \end{addedblock}
   \end{quote}
 \end{itemize}
-
-
-\rSec0[expo]{Exposing exposition-only concepts}
-
-P0896 [specialized.algorithms] provides "rangified" versions of the specialized
-memory algorithms \tcode{uninitialized_copy} et al. The algorithms are
-constrained using a family of concepts that refine iterator, sentinel, or range
-concepts by forbidding some of the required operations to emit exceptions. LWG
-reviewers were displeased that these concepts are all exposition-only, instead
-of making them available to users who want to write their own raw memory
-algorithms.
-
-Aside: There is general uneasiness among LWG reviewers with the amount of
-exposition-only machinery in P0896. We explained that this is a natural
-consequence of the addition of Concepts to the language. In C++17 we might
-have exhaustively repeated the same set of requirements in Requires elements for
-several library functions, but in C++20 it's ``easy'' to define a concept as a
-handle to that set of requirements and use the concept to directly constrain the
-several library functions. Obviously not every set of requirements is generally
-useful and fully-designed to the point that it should be exported to users with
-a public name, so we end up with exposition-only concepts. LEWG should expect
-pushback in the future against designs with substantial exposition-only
-machinery and questions about whether or not consideration has been given to
-exporting that machinery.
-
-This paper proposes that LEWG reconsider making the concepts in P0896
-[special.mem.concepts] exposition only, and provides wording to export those
-concepts.
-
-\rSec1[expo.words]{Technical specifications}
-
-Modify [memory.syn] as follows:
-\begin{quote}
-\begin{codeblock}
-  // \cxxref{specialized.algorithms}, specialized algorithms
-  // \cxxref{special.mem.concepts}, special memory concepts
-  template<class I>
-    concept @\changed{\placeholdernc{no-throw-input-iterator}}{NoThrowInputIterator}@ = @\seebelownc@; @\removed{// \expos}@
-
-  template<class I>
-    concept @\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ = @\seebelownc@; @\removed{// \expos}@
-
-  template<class S, class I>
-    concept @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@ = @\seebelownc@; @\removed{// \expos}@
-
-  template<class R>
-    concept @\changed{\placeholdernc{no-throw-input-range}}{NoThrowInputRange}@ = @\seebelownc@; @\removed{// \expos}@
-
-  template<class R>
-    concept @\changed{\placeholdernc{no-throw-forward-range}}{NoThrowForwardRange}@ = @\seebelownc@; @\removed{// \expos}@
-
-  template<class T>
-    constexpr T* addressof(T& r) noexcept;
-
-  [...]
-
-  namespace ranges {
-    template<@\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ I,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<I> S>
-      requires DefaultConstructible<iter_value_t<I>>
-        I uninitialized_default_construct(I first, S last);
-    template<@\changed{\placeholdernc{no-throw-forward-range}}{NoThrowForwardRange}@ R>
-      requires DefaultConstructible<iter_value_t<iterator_t<R>>>
-        safe_iterator_t<R> uninitialized_default_construct(R&& r);
-
-    template<@\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ I>
-      requires DefaultConstructible<iter_value_t<I>>
-        I uninitialized_default_construct_n(I first, iter_difference_t<I> n);
-  }
-
-  [...]
-
-  namespace ranges {
-    template<@\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ I,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<I> S>
-      requires DefaultConstructible<iter_value_t<I>>
-        I uninitialized_value_construct(I first, S last);
-    template<@\changed{\placeholdernc{no-throw-forward-range}}{NoThrowForwardRange}@ R>
-      requires DefaultConstructible<iter_value_t<iterator_t<R>>>
-        safe_iterator_t<R> uninitialized_value_construct(R&& r);
-
-    template<@\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ I>
-      requires DefaultConstructible<iter_value_t<I>>
-        I uninitialized_value_construct_n(I first, iter_difference_t<I> n);
-  }
-
-  [...]
-
-  namespace ranges {
-    [...]
-    template<InputIterator I, Sentinel<I> S1,
-             @\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ O,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<O> S2>
-        requires Constructible<iter_value_t<O>, iter_reference_t<I>>
-      uninitialized_copy_result<I, O>
-        uninitialized_copy(I ifirst, S1 ilast, O ofirst, S2 olast);
-    template<InputRange IR, @\changed{\placeholdernc{no-throw-forward-range}}{NoThrowForwardRange}@ OR>
-        requires Constructible<iter_value_t<iterator_t<OR>>, iter_reference_t<iterator_t<IR>>>
-      uninitialized_copy_result<safe_iterator_t<IR>, safe_iterator_t<OR>>
-        uninitialized_copy(IR&& ir, OR&& or);
-
-    template<class I, class O>
-    using uninitialized_copy_n_result = uninitialized_copy_result<I, O>;
-    template<InputIterator I, @\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ O,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<O> S>
-        requires Constructible<iter_value_t<O>, iter_reference_t<I>>
-      uninitialized_copy_n_result<I, O>
-        uninitialized_copy_n(I ifirst, iter_difference_t<I> n, O ofirst, S olast);
-  }
-
-  [...]
-
-  namespace ranges {
-    template<class I, class O>
-      using uninitialized_move_result = uninitialized_copy_result<I, O>;
-    template<InputIterator I, Sentinel<I> S1,
-             @\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ O,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<O> S2>
-      requires Constructible<iter_value_t<O>, iter_rvalue_reference_t<I>>
-      uninitialized_move_result<I, O>
-        uninitialized_move(I ifirst, S1 ilast, O ofirst, S2 olast);
-    template<InputRange IR, @\changed{\placeholdernc{no-throw-forward-range}}{NoThrowForwardRange}@ OR>
-      requires Constructible<iter_value_t<iterator_t<OR>>, iter_rvalue_reference_t<iterator_t<IR>>>
-      uninitialized_move_result<safe_iterator_t<IR>, safe_iterator_t<OR>>
-        uninitialized_move(IR&& ir, OR&& or);
-
-    template<class I, class O>
-      using uninitialized_move_n_result = uninitialized_copy_result<I, O>;
-    template<InputIterator I, @\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ O,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<O> S>
-      requires Constructible<iter_value_t<O>, iter_rvalue_reference_t<I>>
-      uninitialized_move_n_result<I, O>
-        uninitialized_move_n(I ifirst, iter_difference_t<I> n, O ofirst, S olast);
-  }
-
-  [...]
-
-  namespace ranges {
-    template<@\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ I,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<I> S, class T>
-        requires Constructible<iter_value_t<I>, const T&>
-      I uninitialized_fill(I first, S last, const T& x);
-    template<@\changed{\placeholdernc{no-throw-forward-range}}{NoThrowForwardRange}@ R, class T>
-        requires Constructible<iter_value_t<iterator_t<R>>, const T&>
-      safe_iterator_t<R> uninitialized_fill(R&& r, const T& x);
-
-    template<@\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ I, class T>
-        requires Constructible<iter_value_t<I>, const T&>
-      I uninitialized_fill_n(I first, iter_difference_t<I> n, const T& x);
-  }
-
-  [...]
-
-  namespace ranges {
-    template<Destructible T>
-      void destroy_at(T* location) noexcept;
-
-    template<@\changed{\placeholdernc{no-throw-input-iterator}}{NoThrowInputIterator}@ I,
-             @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<I> S>
-        requires Destructible<iter_value_t<I>>
-      I destroy(I first, S last) noexcept;
-    template<@\changed{\placeholdernc{no-throw-input-range}}{NoThrowInputRange}@ R>
-        requires Destructible<iter_value_t<iterator_t<R>>
-      safe_iterator_t<R> destroy(R&& r) noexcept;
-
-    template<@\changed{\placeholdernc{no-throw-input-iterator}}{NoThrowInputIterator}@ I>
-        requires Destructible<iter_value_t<I>>
-      I destroy_n(I first, iter_difference_t<I> n) noexcept;
-  }
-
-  [...]
-\end{codeblock}
-\end{quote}
-and modify the declarations of the affected algorithms similarly where they
-appear in the subclauses of [specialized.algorithms].
-
-Modify [special.mem.concepts] as follows:
-\begin{quote}
-\pnum
-Some algorithms in this subclause are constrained with the following
-\removed{exposition-only} concepts:
-
-\begin{itemdecl}
-template<class I>
-concept @\changed{\placeholdernc{no-throw-input-iterator}}{NoThrowInputIterator}@ = @\removed{// exposition only}@
-  InputIterator<I> &&
-  is_lvalue_reference_v<iter_reference_t<I>> &&
-  Same<remove_cvref_t<iter_reference_t<I>>, iter_value_t<I>>;
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-No exceptions are thrown from increment,
-copy construction, move construction,
-copy assignment, move assignment,
-or indirection through valid iterators.
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class S, class I>
-concept @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@ = Sentinel<S, I>; @\removed{// exposition only}@
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-No exceptions are thrown from comparisons between
-objects of type \tcode{I} and \tcode{S}.
-
-\pnum
-\begin{note}
-The distinction between \libconcept{Sentinel} and
-\libconcept{\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}} is purely semantic.
-\end{note}
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class R>
-concept @\changed{\placeholdernc{no-throw-input-range}}{NoThrowInputRange}@ = @\removed{// exposition only}@
-  Range<R> &&
-  @\changed{\placeholder{no-throw-input-iterator}}{NoThrowInputIterator}@<iterator_t<R>> &&
-  @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<sentinel_t<R>, iterator_t<R>>;
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum No exceptions are thrown from calls to \tcode{begin} and \tcode{end}
-on an object of type \tcode{R}.
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class I>
-concept @\changed{\placeholdernc{no-throw-forward-iterator}}{NoThrowForwardIterator}@ = @\removed{// exposition only}@
-  @\changed{\placeholder{no-throw-input-iterator}}{NoThrowInputIterator}@<I> &&
-  ForwardIterator<I> &&
-  @\changed{\placeholdernc{no-throw-sentinel}}{NoThrowSentinel}@<I, I>;
-\end{itemdecl}
-
-\begin{itemdecl}
-template<class R>
-concept @\changed{\placeholdernc{no-throw-forward-range}}{NoThrowForwardRange}@ = @\removed{// exposition only}@
-  @\changed{\placeholder{no-throw-input-range}}{NoThrowInputRange}@<R> &&
-  @\changed{\placeholder{no-throw-forward-iterator}}{NoThrowForwardIterator}@<iterator_t<R>>;
-\end{itemdecl}
-\end{quote}
 
 
 \rSec0[dangle]{Use cases left \tcode{dangling}}
@@ -971,48 +666,76 @@ iterator value to retrieve.
 
 \rSec1[dangle.words]{Technical specifications}
 
-Introduce \tcode{class dangling} into the \tcode{<ranges>} synopsis in
-[ranges.syn]:
+Modify the \tcode{<ranges>} synopsis in \cxxref{ranges.syn} as follows:
 \begin{quote}
 \begin{codeblock}
-    struct view_base { };
+namespace std::ranges {
+  [...]
 
-    @\added{// \cxxref{dangling}, dangling}@
-    @\added{class dangling;}@
+  // \cxxref{range.range}, Range
+  template<class T>
+    using iterator_t = decltype(ranges::begin(declval<T&>()));
 
-    template<@\changed{\placeholder{fowarding-range}}{Range}@ R>
-      using safe_iterator_t =
-        @\added{conditional_t<\placeholdernc{forwarding-range}<R>,}@ iterator_t<R>@\added{, dangling>}@;
+  template<class T>
+    using sentinel_t = decltype(ranges::end(declval<T&>()));
 
-    // \cxxref{range.requirements}, range requirements
+  @\removed{template<\placeholder{fowarding-range} R>}@
+    @\removed{using safe_iterator_t = iterator_t<R>;}@
 
-    [...]
+  template<class T>
+    concept Range = @\seebelownc@;
 
-    template<Iterator I, Sentinel<I> S = I, subrange_kind K = @\seebelownc@>
-      requires K == subrange_kind::sized || !SizedSentinel<S, I>
-    class subrange;
+  [...]
 
-    template<@\changed{\placeholder{forwarding-range}}{Range}@ R>
-      using safe_subrange_t = @\removed{subrange<iterator_t<R>>}@
-        @\added{conditional_t<\placeholder{forwarding-range}<R>, subrange<iterator_t<R>>, dangling>}@;
+  template<Iterator I, Sentinel<I> S = I, subrange_kind K = @\seebelownc@>
+    requires (K == subrange_kind::sized || !SizedSentinel<S, I>)
+  class subrange;
 
-    // \cxxref{range.adaptors.all}
-    namespace view { inline constexpr @\unspec@ all = @\unspecnc@; }
+  @\added{// \cxxref{dangling}, dangling iterator handling}@
+  @\added{struct dangling;}@
+
+  @\added{template<Range R>}@
+    @\added{using safe_iterator_t =}@
+      @\added{conditional_t<\placeholdernc{forwarding-range}<R>, iterator_t<R>, dangling>;}@
+
+  template<@\changed{\placeholder{forwarding-range}}{Range}@ R>
+    using safe_subrange_t =
+      @\added{conditional_t<\placeholder{forwarding-range}<R>,}@ subrange<iterator_t<R>>@\added{, dangling>}@;
+
+  // \cxxref{range.all}, all view
+  namespace view { inline constexpr @\unspec@ all = @\unspecnc@; }
+
+  [...]
+}
 \end{codeblock}
 \end{quote}
 
-Add a new subclause to [range.utility], immediately before [range.view_interface]:
+Add a new subclause to \cxxref{range.utility}, following \cxxref{range.subrange}:
 
 \begin{quote}
 \begin{addedblock}
 \setcounter{chapter}{23}
-\setcounter{section}{7}
-\rSec2[dangling]{class \tcode{dangling}}
+\setcounter{section}{6}
+\setcounter{subsection}{3}
+\rSec2[dangling]{Dangling iterator handling}
 \pnum
-The tag type \tcode{dangling} is used to indicate that an algorithm that
-typically returns an iterator into a \libconcept{Range} argument does not
-return an iterator into a particular rvalue \libconcept{Range} argument which
-could potentially dangle.
+The tag type \tcode{dangling} is used together with the template aliases
+\tcode{safe_iterator_t} and \tcode{safe_subrange_t} to indicate that
+an algorithm that typically returns an iterator into or
+subrange of a \libconcept{Range} argument does not return
+an iterator or subrange which could potentially dangle
+for a particular rvalue \libconcept{Range} argument which
+does not model \libconcept{\placeholder{forwarding-range}}\cxxiref{range.range}.
+
+\begin{codeblock}
+namespace std {
+  struct dangling {
+    constexpr dangling() noexcept = default;
+    template<class... Args>
+      constexpr dangling(Args&&...) noexcept { }
+  };
+}
+\end{codeblock}
 
 \pnum
 \begin{example}
@@ -1029,88 +752,57 @@ static_assert(Same<decltype(result3), vector<int>::iterator>);
 The call to \tcode{ranges::find} at \#1 returns \tcode{dangling} since
 \tcode{f()} is an rvalue \tcode{vector}; the \tcode{vector} could potentially
 be destroyed before a returned iterator is dereferenced. However, the calls
-at \#2 and \#3 both return iterators since \tcode{vec} is an lvalue range and
-specializations of \tcode{subrange} model \libconcept{forwarding-range},
-respectively.
+at \#2 and \#3 both return iterators since the lvalue \tcode{vec} and
+specializations of \tcode{subrange} model \libconcept{forwarding-range}.
 \end{example}
-
-\begin{codeblock}
-namespace std {
-  class dangling {
-  public:
-    constexpr dangling() noexcept = default;
-    template<class... Args>
-      constexpr dangling(Args&&...) noexcept { }
-  };
-}
-\end{codeblock}
 \end{addedblock}
 \end{quote}
 
 
-\setcounter{chapter}{7}
-\rSec0[sub.headers]{Headers \tcode{iterator_}- and \tcode{range_concepts}}
-
-When defining an iterator/container/algorithm it's extremely likely that I need
-the iterator/range concepts/traits/operations in the
-\tcode{<iterator>}/\tcode{<ranges>} headers, but substantially less likely that I
-need the iterator/range adaptors. Indeed, while the ``support machinery'' in
-these headers is static, the set of useful adaptors is effectively unbounded and
-will grow over time as more are proposed.
-
-In the interests of reducing the cost of transitive includes that my
-iterator/container/algorithm header imposes on users, it would be useful if the
-support machinery in \tcode{<iterator>}/\tcode{<ranges>} were split out into
-separate \tcode{<iterator_support>}/\tcode{<ranges_support>}
-(\tcode{<_base>}? \tcode{<_concepts>}?) headers which the base
-headers include.
-
-\rSec1[sub.headers.words]{Technical specifications}
-
-Split [iterator.synopsis] between the ``range iterator operations'' and
-``predefined iterators and sentinels'', naming the new first subclause
-``Header \tcode{<iterator_support>} synopsis'' with stable name
-[iterator.support.syn]. At what is now the beginning of the \tcode{<iterator>}
-synopsis, add \tcode{\#include <iterator_support>}.
-
-Similarly split [range.syn] between the declarations of the \tcode{all_view}
-alias and the \tcode{filter_view} view adaptor, naming the new first subclause
-``Header \tcode{<ranges_support>} synopsis'' with stable name
-[range.support.syn]. At what is now the beginning of the \tcode{<ranges>}
-synopsis, add \tcode{\#include <ranges_support>}. Relocate the declarations
-directly in namespace \tcode{std} from \tcode{<ranges>}:
-\begin{codeblock}
-  namespace view = ranges::view;
-
-  template<class I, class S, ranges::subrange_kind K>
-  struct tuple_size<ranges::subrange<I, S, K>>
-    : integral_constant<size_t, 2> {};
-  template<class I, class S, ranges::subrange_kind K>
-  struct tuple_element<0, ranges::subrange<I, S, K>> {
-    using type = I;
-  };
-  template<class I, class S, ranges::subrange_kind K>
-  struct tuple_element<1, ranges::subrange<I, S, K>> {
-    using type = S;
-  };
-\end{codeblock}
-to the end of \tcode{<ranges_support>}.
-
-
-\rSec0[isw]{Rename \libconcept{IndirectlySwappable}}
-
-\href{https://wg21.link/p0898r3}{P0898R3 ``Standard Library Concepts''}
-established a convention that symmetric two-parameter concepts -
-concepts such that \tcode{C<T, U> == C<U, T>} -
-have names that end in \tcode{With}. P0896's \libconcept{IndirectlySwappable} is
-such a concept. While \libconcept{IndirectlySwappableWith} is a lot to type,
-changing it would be consistent with the convention.
-
-\rSec1[isw.words]{Technical specifications}
-
-Change all occurrences of the name \libconcept{IndirectlySwappable} to
-\libconcept{IndirectlySwappableWith}.
-
-
-% \rSec0[]{Move \tcode{Incrementable} into \tcode{<concepts>}}
-% How do we extract \tcode{iter_difference_t} from \tcode{iterator_traits}?
+%% \setcounter{chapter}{7}
+%% \rSec0[sub.headers]{Headers \tcode{iterator_}- and \tcode{range_concepts}}
+%%
+%% When defining an iterator/container/algorithm it's extremely likely that I need
+%% the iterator/range concepts/traits/operations in the
+%% \tcode{<iterator>}/\tcode{<ranges>} headers, but substantially less likely that I
+%% need the iterator/range adaptors. Indeed, while the ``support machinery'' in
+%% these headers is static, the set of useful adaptors is effectively unbounded and
+%% will grow over time as more are proposed.
+%%
+%% In the interests of reducing the cost of transitive includes that my
+%% iterator/container/algorithm header imposes on users, it would be useful if the
+%% support machinery in \tcode{<iterator>}/\tcode{<ranges>} were split out into
+%% separate \tcode{<iterator_support>}/\tcode{<ranges_support>}
+%% (\tcode{<_base>}? \tcode{<_concepts>}?) headers which the base
+%% headers include.
+%%
+%% \rSec1[sub.headers.words]{Technical specifications}
+%%
+%% Split [iterator.synopsis] between the ``range iterator operations'' and
+%% ``predefined iterators and sentinels'', naming the new first subclause
+%% ``Header \tcode{<iterator_support>} synopsis'' with stable name
+%% [iterator.support.syn]. At what is now the beginning of the \tcode{<iterator>}
+%% synopsis, add \tcode{\#include <iterator_support>}.
+%%
+%% Similarly split [range.syn] between the declarations of the \tcode{all_view}
+%% alias and the \tcode{filter_view} view adaptor, naming the new first subclause
+%% ``Header \tcode{<ranges_support>} synopsis'' with stable name
+%% [range.support.syn]. At what is now the beginning of the \tcode{<ranges>}
+%% synopsis, add \tcode{\#include <ranges_support>}. Relocate the declarations
+%% directly in namespace \tcode{std} from \tcode{<ranges>}:
+%% \begin{codeblock}
+%%   namespace view = ranges::view;
+%%
+%%   template<class I, class S, ranges::subrange_kind K>
+%%   struct tuple_size<ranges::subrange<I, S, K>>
+%%     : integral_constant<size_t, 2> {};
+%%   template<class I, class S, ranges::subrange_kind K>
+%%   struct tuple_element<0, ranges::subrange<I, S, K>> {
+%%     using type = I;
+%%   };
+%%   template<class I, class S, ranges::subrange_kind K>
+%%   struct tuple_element<1, ranges::subrange<I, S, K>> {
+%%     using type = S;
+%%   };
+%% \end{codeblock}
+%% to the end of \tcode{<ranges_support>}.
