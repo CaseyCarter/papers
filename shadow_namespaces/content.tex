@@ -1,0 +1,472 @@
+\begingroup
+\def\hd{\begin{tabular}{lll}
+          \textbf{Document Number:} & {\larger\docno}                 \\
+          \textbf{Date:}            & \reldate                        \\
+          \textbf{Audience:}        & Library Evolution Working Group \\
+          \textbf{Author:}          & Casey Carter                    \\
+          \textbf{Reply to:}        & casey@carter.net
+          \end{tabular}
+}
+\newlength{\hdwidth}
+\settowidth{\hdwidth}{\hd}
+\hfill\begin{minipage}{\hdwidth}\hd\end{minipage}
+\endgroup
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{\Huge \doctitle}
+\end{center}
+
+\vspace{0.5cm}
+
+\chapter{Scope}
+
+Name collisions between the Standard Library and user programs that pull the
+entire standard library into their namespaces - or the global namespace - via
+\tcode{using namespace std;} are a perennial problem for C++. Many members of
+the community - and WG21 - believe that it is LEWG's responsibility to choose
+names that don't conflict with common names in user programs to avoid collisions,
+whereas many others believe that \tcode{using namespace std;} is an explicit
+directive requesting such collisions.
+
+The mechanisms in place for determining what names have the potential for
+collision are straightforward: (1) we guess, or (2) someone at Big Software
+Company searches their codebase for collisions. Effectively, this process
+insulates code at Big Software Companies that send representatives to
+meetings and code in domains in which WG21 members have worked from name
+collisions. Programmers at Small Software Company or who work in
+underrepresented domains are left to deal with name collisions.
+
+Our process for changing names that we believe are likely to cause collisions is
+also straightforward: we either pick an inferior name, or we move the good
+name\footnote{For the purposes of this argument, assume that LEWG chooses good
+names for Standard Library components. If that's too great a stretch, imagine
+that occurrences of the phrase ``good name'' in this proposal instead read
+``chosen name.''} into a subnamespace of \tcode{std}. Note that neither of these
+choices actually avoids the possibility of collisions - an inferior name or
+subnamespace could still cause collisions, after all - so much as reduces our
+expectation of collisions assuming that our estimates of the collision potential
+of the original and new names approximate reality.
+
+For a recent example, consider P0631R4 ``Math Constants''~\cite{P0631R4} which
+adds definitions of common mathematical constants to the standard library such
+as \tcode{pi} and \tcode{e}. Many LEWG regulars were unconcerned with the
+collision potential of the names of these constants - people who write using
+directives are asking for collisions, after all - whereas many other WG21
+members were outraged at the idea that the standard library would use names with
+high collision potential and demanded that the names be changed or moved into
+a subnamespace of \tcode{std}. The most commonly supported fix in the reflector
+discussion was to relocate the constants into \tcode{std::math}.\footnote{This
+author's guess is that \tcode{math} is nearly as common a name as \tcode{pi} and
+that the suggested fix doesn't significantly reduce the potential for collision
+so much as spread it more thinly across a wider domain.}
+
+Similar examples appear regularly in the Library groups: an author chooses an
+appropriate name for a library component, LEWG debates whether they agree that
+the chosen name is the most appropriate in an attempt to maximize the quality of
+the library, and upon discovering that the name choice is \emph{too} good,
+determines how to obfuscate it to avoid collisions.
+
+
+the proper
+and well-known names names for these constants without locating them in a new
+subnamespace of \tcode{std}.
+
+The \libconcept{View} concept requires that its models are \libconcept{Copyable},
+which excludes some useful \libconcept{Range} types -
+notably including coroutine generators.
+This proposal suggests relaxing the copyability requirement
+to allow \libconcept{Range} types which are
+\libconcept{Movable} but not \libconcept{Copyable}
+to model \libconcept{View} and hence be
+first-class citizens in view composition so as to
+be more usable with the ranges library.
+
+\begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
+\begin{codeblock}
+return view::iota(0, 42)
+  | view::filter(is_even)
+  | view::transform([](int i) -> auto& {
+      static auto r = int_range_generator(i);
+      return r; // YOLO
+    })
+  | view::join;
+\end{codeblock} & \begin{codeblock}
+return view::iota(0, 42)
+  | view::filter(is_even)
+  | view::transform([](int i) {
+      return int_range_generator(i);
+    })
+  | view::join;
+\end{codeblock} \\ \rowsep
+
+\begin{codeblock}
+struct fib_view {
+  struct iterator {
+    using difference_type = int;
+    using value_type = int;
+
+    int a = 0, b = 1;
+
+    int operator*() const { return a; }
+    iterator& operator++() {
+      a = std::exchange(b, a + b);
+      return *this;
+    }
+    void operator++(int) { ++*this; }
+  };
+
+  auto begin() const { return iterator{}; }
+  auto end() const { return std::unreachable; }
+};
+// ...
+return fib_view{} | view::take(20);
+\end{codeblock} & \begin{codeblock}
+generator<int> fib() {
+  int a = 0, b = 1;
+  while (true)
+    co_yield std::exchange(a, std::exchange(b, a + b));
+}
+// ...
+return fib() | view::take(20);
+\end{codeblock} \\
+\end{libtab2}
+
+\section{Revision History}
+\subsection{Revision 0}
+\begin{itemize}
+\item Inserted many words into an empty document.
+\end{itemize}
+
+\chapter{Problem description}
+
+\section{background}
+P0896R4 ``The One Ranges Proposal''~\cite{p0896} introduced the \libconcept{View}
+concept into the \Cpp working draft. \libconcept{View} refines \libconcept{Semiregular}
+which refines \libconcept{Copyable} in order that \libconcept{View}s may be used in ways
+similar to \libconcept{Iterator}s which also refine \libconcept{Semiregular}.
+\libconcept{Semiregular}ity combined with the constant-time complexity requirement on
+\libconcept{View} and \libconcept{Iterator} operations allows them to copied freely by
+range adaptors and the range adaptor closure object machinery used in
+\libconcept{View} composition. Since general \libconcept{Range} types aren't required to
+support such usage, they are in some sense second-class citizens in \libconcept{View}
+composition.
+
+C++11 added move-only types to the language. Parts of the Standard Library have
+adapted to better support move-only types, for example, we can store them in
+containers. Other parts of the library have been reluctant to do so: the
+algorithms
+- with the exception of the serial overload of \tcode{std::for_each} -
+still require copyable function objects, for example, and we still don't have a
+mechanism to type erase move-only function objects. It behooves us to consider
+whether the Ranges view composition machinery added by P0896R4 should support
+move-only types by admitting move-only views.
+
+Some examples to consider:
+\begin{itemize}
+\item \tcode{single_view}\cxxiref{range.single.view} requires its element to model
+  \libconcept{CopyConstructible}. The element is stored inside an
+  \tcode{optional}-like wrapper in the \tcode{single_view} object, so the
+  element must model \libconcept{CopyConstructible} in order for the
+  \tcode{single_view} to model \libconcept{Semiregular}. If \libconcept{View}'s
+  copyability requirement were relaxed, \tcode{single_view} could support types
+  that only model \libconcept{MoveConstructible}.
+\item \tcode{filter_view} and \tcode{transform_view} each hold a function object.
+  Those function objects are similarly required to be \libconcept{CopyConstructible}
+  only so the view can model \libconcept{Semiregular}.
+\end{itemize}
+
+\section{Why views but not function object arguments?}
+
+We've managed to put off supporting move-only types in standard library
+algorithms on the basis that there's a simple workaround: add a layer of
+indirection! If you can't call
+\tcode{std::ranges::find_if(myvec, move_only_predicate)}
+with your move-only function object, call
+\tcode{std::ranges::find_if(myvec, std::ref(move_only_predicate))}
+instead. This solution typically isn't a burden since calls to algorithms
+typically occur in straight-line code that already has named objects for the
+range / iterator arguments. If you want to pass an rvalue move-only function
+object to an algorithm, stuff it into a named object as well and use
+\tcode{std::ref}.
+
+View composition differs fundamentally from a series of algorithm calls. Instead
+of a series of statements interleaved with declarations, a view composition
+expression is a composition of nested function calls, possibly disguised with
+the \tcode{|} operator to give it a more linear appearance, that yields a view.
+There's nowhere to store intermediate results and no mechanism to name
+temporaries in "the middle" of such an expression. It's necessary to
+find a place to store the move-only range, pass an lvalue into view composition,
+and somehow ensure that the stored range outlives the composed view. This
+can be challenging when a function wants to return the result of composition of
+a local move-only range with some sequence of range adaptors.
+
+Another important difference is that \libconcept{View} is a concept that's exported
+for users to utilize in their own programs, whereas the requirement that the
+algorithms need copyable function objects is only words in a specification. WG21
+can relax a requirement expressed in specification text any time we like simply
+by changing the words - conforming implementations must ensure they handle the
+relaxed requirements, but there's no possiblity of breaking user programs.
+Conversely, the set of requirements expressed by a concept in the Standard can
+never change without potential breakage: if we strengthen a concept, existing
+callers of standard library components constrained with that concept may be
+broken. If we weaken a concept, third-party library components constrained with
+that concept are broken by suddenly becoming underconstrained. We have one
+chance to get concepts right.
+
+\section{Coroutines on the horizon}
+
+Generators are the intersection of coroutines and ranges. A generator is, simply
+enough, a coroutine that models the \libconcept{Range} concept. A user writes a
+function whose return type is a generator type that \tcode{co_yield}s
+successive elements of the range
+(\href{https://wandbox.org/permlink/OjvfCc8L3pYMNdU9}{LIVE}):
+\begin{codeblock}
+generator<int> fib() {
+  int a = 0, b = 1;
+  while (true)
+    co_yield std::exchange(a, std::exchange(b, a + b));
+}
+\end{codeblock}
+which is substantially more concise than the equivalent direct implementation of
+such an input range
+(\href{https://wandbox.org/permlink/tlqfMsvXuoz4hSy4}{LIVE}):
+\begin{codeblock}
+struct fib_view {
+  struct iterator {
+    using difference_type = int;
+    using value_type = int;
+
+    int a = 0, b = 1;
+
+    int operator*() const { return a; }
+    iterator& operator++() {
+      a = std::exchange(b, a + b);
+      return *this;
+    }
+    void operator++(int) { ++*this; }
+  };
+
+  auto begin() const { return iterator{}; }
+  auto end() const { return std::unreachable; }
+};
+\end{codeblock}
+Note that the direct range implementation models \libconcept{View}, so it can easily
+pariticipate in view composition - but the same is not true for the generator
+implementation.
+
+Coroutine frames are not copyable resources, so it's not possible to implement a
+generator that can produce truly independent copies. It is possible to implement
+a generator that is as \libconcept{Semiregular} as are input
+iterators\footnote{With thanks to Lewis Baker.}, but only by invoking the same
+spooky-action-at-distance that input iterators have in which operations
+performed on an input iterator (or generator) can potentially invalidate the
+copies. \libconcept{Movable}-but-not-\libconcept{Copyable} input iterators (or generators)
+would avoid this issue. While it may be too late for us to solve the problem for
+input iterators, it would seem a shame to repeat the design error with
+generators.
+
+\section{What about range adaptors that want to copy \libconcept{View}s?}
+The range adaptors in the working draft - and the range adaptors in range-v3 -
+only copy views in one circumstance: when a user calls the \tcode{base()}
+member function to retrieve a copy of the underlying view being adapted. None of
+the adaptors copy views in the process of their normal operation. In fact, no
+one has suggested to the author a potential design for a range adaptor which
+\emph{does} need to copy a view.
+
+On the other hand, we \emph{do} have concrete examples of types
+that would like to model \libconcept{View}
+which are not copyable. The evidence suggests that we should relax the
+copyability requirement of \libconcept{View} now, and if and when an adaptor is
+discovered which does need to copy a view it can be constrained with
+\tcode{View<T> \&\& Copyable<T>} along with the added semantic requirement that
+copies are O(1). We could introduce a \tcode{CopyableView} concept with these
+requirements when that day comes to ease using this constraint, although the
+lack of any suggestion of an adaptor that needs the constraint suggests it would
+be premature to standardize such a concept now.
+
+\section{Does this mean containers can be views?}
+Potentially yes, although there are some messy details. \libconcept{View} should
+require O(1) destruction as well as the current requirement for O(1) copies and
+moves - which lack the proposed wording below corrects - which rules out many
+containers. Allocator-aware containers also notably only have O(1) move assignment when
+their allocator has specific properties. This paper does not propose any changes
+to allow \tcode{View} to accept container types that would otherwise be rejected
+by the \tcode{enable_view} heuristic, but that is a potential avenue for future
+work.
+
+Eric Niebler has expressed concerns to the author in private communication about
+such a change muddying the Ranges design, with which the author agrees: we need
+to tread very carefully here.
+
+
+\chapter{Proposal}
+Put simply, the proposal is to remove the copyability requirement from the
+\libconcept{View} concept as defined in \cxxref{range.view}:
+\begin{codeblock}
+template<class T>
+  concept View =
+    Range<T> && Semiregular<T> && enable_view<T>;
+\end{codeblock}
+by decomposing \tcode{Semiregular<T>} into \tcode{Copyable<T> \&\&
+DefaultConstructible<T>} and then replacing \libconcept{Copyable} with
+\libconcept{Movable}:
+\begin{codeblock}
+template<class T>
+  concept View =
+    Range<T> && Movable<T> && DefaultConstructible<T> && enable_view<T>;
+\end{codeblock}
+This allows for move-only types to model \libconcept{View} without excluding any
+types which model the prior formulation of the concept.
+
+Note that
+\href{https://github.com/ericniebler/range-v3/commit/11fb1f0c6ef60a61a3eb264b5c3d0d42fc4615a2}{
+a similar relaxation that only applies to single-pass (input and output) views}
+has been implemented in range-v3~\cite{range-v3} since June of 2017
+\href{https://github.com/ericniebler/range-v3/commit/d2bd910faa75d9016f6fb124f9de46c926c49c72}{
+along with the experimental range generator implementation}.
+
+To redress the problem that the \tcode{base()} members of the range adaptors
+return copies of the underlying view, we propose that each such \tcode{base()}
+member be replaced to by two overloads: a \tcode{const}-qualified overload that
+requires the type of the underlying view to model \tcode{CopyConstructible}, and
+a \tcode{\&\&}-qualified overload that extracts the underlying view from the
+adaptor (thus leaving it invalid).
+
+
+\chapter{Technical specifications}
+Change \cxxref{range.req.general}/2 as follows \begin{note}There's a drive-by
+edit here to require O(1) destruction: the intent has always been that
+\libconcept{View}s have only constant-time operations, we apparently forgot that
+destruction is an operation.\end{note}:
+\begin{quote}
+... The \libconcept{View} concept specifies requirements on a \libconcept{Range} type with
+constant-time \changed{copy and assign}{move} operations \added{and destruction}.
+\end{quote}
+
+Change \cxxref{range.view} as follows:
+\begin{quote}
+\pnum
+The \libconcept{View} concept specifies the requirements of a \libconcept{Range} type
+that has constant time \removed{copy,} move\added{ construction},
+\added{move} assignment\added{, and destruction} \removed{operators}; that is,
+the cost of these operations is not proportional to
+the number of elements in the \libconcept{View}.
+
+\pnum
+\begin{example}
+Examples of \tcode{View}s are:
+
+\begin{itemize}
+\item A \libconcept{Range} type that wraps a pair of iterators.
+
+\item A \libconcept{Range} type that holds its elements by \tcode{shared_ptr}
+and shares ownership with all its copies.
+
+\item A \libconcept{Range} type that generates its elements on demand.
+\end{itemize}
+
+Most containers\cxxiref{containers} are not views since
+\changed{copying}{destruction of} the container \changed{copies}{destroys} the
+elements, which cannot be done in constant time.
+\end{example}
+
+\indexlibrary{\idxcode{enable_view}}%
+\indexlibrary{\idxcode{View}}%
+\begin{itemdecl}
+template<class T>
+  inline constexpr bool enable_view = @\seebelow@;
+
+template<class T>
+  concept View =
+    Range<T> && Semiregular<T> && enable_view<T>;
+\end{itemdecl}
+
+\begin{codeblock}
+template<class T>
+  concept View =
+    Range<T> && @\changed{Semiregular<T>}{Movable<T> \&\& DefaultConstructible<T>}@ && enable_view<T>;
+\end{codeblock}
+\end{quote}
+
+Change \cxxref{range.filter.view} as follows:
+\begin{quote}
+\begin{codeblock}
+namespace std::ranges {
+  template<InputRange V, IndirectUnaryPredicate<iterator_t<V>> Pred>
+    requires View<V> && is_object_v<Pred>
+  class filter_view : public view_interface<filter_view<V, Pred>> {
+    [...]
+    constexpr filter_view(R&& r, Pred pred);
+
+    constexpr V base() const @\added{requires CopyConstructible<V> \{ return base_}; \added{\}}@
+    @\added{constexpr V base() \&\& \{ return std::move(base_); \}}@
+
+    constexpr iterator begin();
+    [...]
+\end{codeblock}
+[...]
+\setcounter{Paras}{2}
+\begin{removedblock}
+\begin{itemdecl}
+constexpr V base() const;
+\end{itemdecl}
+
+\begin{itemdescr}
+\pnum
+\effects Equivalent to: \tcode{return base_;}
+\end{itemdescr}
+\end{removedblock}
+\end{quote}
+Change \cxxref{range.transform.view}, \cxxref{range.take.view},
+\cxxref{range.common.view}, and \cxxref{range.reverse.view} similarly.
+
+Change \cxxref{range.join.view} as follows \begin{note} This is a drive-by fix
+to add \tcode{base} which was unintentionally omitted from \tcode{join_view} and
+\tcode{split_view} in P0896R4.\end{note}:
+\begin{quote}
+\begin{codeblock}
+namespace std::ranges {
+  template<InputRange V>
+    requires View<V> && InputRange<iter_reference_t<iterator_t<V>>> &&
+             (is_reference_v<iter_reference_t<iterator_t<V>>> ||
+              View<iter_value_t<iterator_t<V>>>)
+  class join_view : public view_interface<join_view<V>> {
+    [...]
+    template<InputRange R>
+      requires ViewableRange<R> && Constructible<V, all_view<R>>
+    constexpr explicit join_view(R&& r);
+
+    @\added{constexpr V base() const requires CopyConstructible<V> \{ return base_; \}}@
+    @\added{constexpr V base() \&\& \{ return std::move(base_); \}}@
+
+    constexpr auto begin() {
+    [...]
+\end{codeblock}
+[...]
+\end{quote}
+Add the same definitions to \cxxref{range.split.view} before the first
+definition of \tcode{begin}.
+
+Change \cxxref{range.join.iterator}/6 as follows \begin{note} Yes, I claimed above
+that ``none of the adaptors copy a view in their normal operation'' despite that
+this is an occurrence of exactly that which should properly be a move. Sue me.\end{note}
+\begin{note} This includes a drive-by simplification of a return type from
+\tcode{decltype(auto)} to \tcode{auto\&} to clarify that \tcode{update_inner}
+always returns an lvalue.\end{note}:
+\begin{quote}
+\begin{codeblock}
+auto update_inner = [this](iter_reference_t<iterator_t<Base>> x) -> @\changed{decltype(auto)}{auto\&}@ {
+  if constexpr (ref_is_glvalue) // \tcode{x} is a reference
+    return (x);                 // \tcode{(x)} is an lvalue
+  else
+    return (parent_->inner_ = view::all(@\added{std::move(}@x@\added{)}@));
+};
+
+for (; outer_ != ranges::end(parent_->base_); ++outer_) {
+  auto& inner = update_inner(*outer_);
+  [...]
+\end{codeblock}
+\end{quote}
+
+%% TODO: implement `move_only_view` in range-v3 and cmcstl2 for validation.
