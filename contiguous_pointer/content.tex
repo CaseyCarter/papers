@@ -1,0 +1,111 @@
+\begingroup
+\def\hd{\begin{tabular}{lll}
+          \textbf{Document Number:} & {\larger\docno}                 \\
+          \textbf{Date:}            & \reldate                        \\
+          \textbf{Audience:}        & Library Evolution Working Group \\
+          \textbf{Author:}          & Casey Carter                    \\
+          \textbf{Reply to:}        & casey@carter.net
+          \end{tabular}
+}
+\newlength{\hdwidth}
+\settowidth{\hdwidth}{\hd}
+\hfill\begin{minipage}{\hdwidth}\hd\end{minipage}
+\endgroup
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{\Huge \doctitle}
+\end{center}
+
+\vspace{0.5cm}
+
+\chapter{Abstract}
+
+The support for contiguous iterators in the working draft is missing a useful
+feature: a mechanism to convert a contiguous iterator into a pointer that
+denotes the same object. This paper proposes that \tcode{std::to_address} be
+that mechanism.
+
+\begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
+\begin{codeblock}
+extern "C" int some_c_api(T* ptr, size_t size);
+int try_useful_things(ContiguousIterator auto i, size_t n) {
+  // Expects: [i, n) is a valid range
+  if (n == 0) {
+    // Oops - can't dereference past-the-end iterator
+    throw something;
+  }
+  return some_c_api(addressof(*i), n);
+}
+\end{codeblock} & \begin{codeblock}
+extern "C" int some_c_api(T* ptr, size_t size);
+int try_useful_things(ContiguousIterator auto i, size_t n) {
+  // Expects: [i, n) is a valid range
+  return some_c_api(to_address(i), n);
+}
+\end{codeblock} \\ \rowsep
+
+\begin{codeblock} %% FIXME
+\end{codeblock} & \begin{codeblock}
+\end{codeblock} \\
+\end{libtab2}
+
+\section{Revision History}
+\subsection{Revision 0}
+\begin{itemize}
+\item Initial revision.
+\end{itemize}
+
+\chapter{Problem description}
+
+P0944R0 ``Contiguous ranges''~\cite{P0944} proposed support for contiguous
+ranges and iterators, which was merged into P0896R4 ``The One Ranges
+Proposal''~\cite{P0896R4} and then merged into the Working Draft. Neither
+P0944R0 nor P0896R4 proposed a means of obtaining a pointer to the element
+denoted by an arbitrary \tcode{ContiguousIterator}. At the time, the author was
+under the impression that such a mechanism had been a ``third rail'' for past
+contiguous iterator proposals~\cite{N4183}, and that requiring such a mechanism
+would make it impossible to require the iterators of the Standard Library
+containers to model \tcode{ContiguousIterator}. Those implementability concerns
+have since been rectified.
+
+Note that obtaining a pointer value from a dereferenceable
+\tcode{ContiguousIterator} is trivial: \tcode{std::addressof(*i)} returns such a
+pointer value for a contiguous iterator \tcode{i}. Dereferencing a
+non-dereferenceable iterator is (unsurprisingly) not well-defined, so this
+mechanism isn't suitable for iterators not known to be dereferenceable.
+Obtaining a pointer value for the potentially non-dereferenceable iterator
+\tcode{j} that is the past-the-end iterator of a range \range{i}{j} thus
+requires a different mechanism that is well-defined for past-the-end iterators.
+Ideally the mechanism would also be well-defined for dereferenceable iterators
+so it can be used uniformly.
+
+P0653R2 ``Utility to convert a pointer to a raw pointer''~\cite{P0653R2} added
+the function \tcode{std::to_address}\cxxiref{pointer.conversion} to the Standard
+Library which converts values of so-called ``fancy'' pointer types and standard
+smart pointer types to pointer values. In the
+interest of spelling similar things similarly, it seems a good idea to reuse
+this facility to convert \tcode{ContiguousIterator}s to pointer values.
+In practice, that means that a type \tcode{I} must be a pointer type or
+\begin{itemize}
+\item specialize \tcode{pointer_traits<I>} with a member \tcode{element_type}
+  or have a nested member \tcode{element_type}
+  so instantiation of \tcode{pointer_traits<I>} succeeds, and
+\item Either implement \tcode{pointer_traits<I>::to_address} or
+
+\chapter{Proposal}
+
+The basic proposal is to add a requirement to the
+\libconcept{ContiguousIterator} concept that the expression
+\tcode{std::to_address(i)} for an lvalue \tcode{i} of type \tcode{const I} must
+\begin{itemize}
+\item be well-formed and yield a pointer of type
+  \tcode{add_pointer_t<iter_reference_t<i>>},
+\item be well-defined for both dereferenceable and past-the-end pointer values,
+\item yield a pointer value equal to \tcode{std::addressof(*i)} if \tcode{i} is
+  dereferenceable, or equal to \tcode{std::addressof(*(i - 1))} if \tcode{i - 1}
+  is dereferenceable.
+\end{itemize}
+
+
+\chapter{Technical specifications}
