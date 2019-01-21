@@ -1,814 +1,399 @@
-\rSec0[intro]{Scope}
+\chapter{Scope}
 
-The \tcode{View} concept requires that its models are \tcode{Copyable}, which
-excludes some useful \tcode{Range} types. This proposal suggests relaxing the
-copyability requirement to allow \tcode{Range} types which are \tcode{Movable}
-but not \tcode{Copyable} to model \tcode{View} be first-class citizens in
-view composition so as to be more usable with the ranges library.
+The \libconcept{View} concept requires that its models are \libconcept{Copyable},
+which excludes some useful \libconcept{Range} types -
+notably including coroutine generators.
+This proposal suggests relaxing the copyability requirement
+to allow \libconcept{Range} types which are
+\libconcept{Movable} but not \libconcept{Copyable}
+to model \libconcept{View} and hence be
+first-class citizens in view composition so as to
+be more usable with the ranges library.
 
-\rSec1[intro.history]{Revision History}
-\rSec2[intro.history.r0]{Revision 0}
+\begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
+\begin{codeblock}
+auto r0 = view::iota(0, 42)
+  | view::filter(is_even)
+  | view::transform([](int i) {
+      return int_range_generator(i);
+    });
+auto r1 = r0 | view::join;
+\end{codeblock} & \begin{codeblock}
+auto r = view::iota(0, 42)
+  | view::filter(is_even)
+  | view::transform([](int i) {
+      return int_range_generator(i);
+    })
+  | view::join;
+\end{codeblock} \\ \rowsep
+
+\begin{codeblock}
+struct fib_view {
+  struct iterator {
+    using difference_type = int;
+    using value_type = int;
+
+    int a = 0, b = 1;
+
+    int operator*() const { return a; }
+    iterator& operator++() {
+      a = std::exchange(b, a + b);
+      return *this;
+    }
+    void operator++(int) { ++*this; }
+  };
+
+  auto begin() const { return iterator{}; }
+  auto end() const { return std::unreachable; }
+};
+// ...
+return fib_view{} | view::take(20);
+\end{codeblock} & \begin{codeblock}
+generator<int> fib() {
+  int a = 0, b = 1;
+  while (true) {
+    co_yield std::exchange(a, std::exchange(b, a + b));
+  }
+}
+// ...
+return fib() | view::take(20);
+\end{codeblock} \\
+\end{libtab2}
+
+\section{Revision History}
+\subsection{Revision 0}
 \begin{itemize}
 \item Inserted many words into an empty document.
 \end{itemize}
 
-\rSec1[background]{Problem description}
+\chapter{Problem description}
 
-%% ericniebler/range-v3@d2bd910faa75d9016f6fb124f9de46c926c49c72 added generator 20170610
-%% ericniebler/range-v3@11fb1f0c6ef60a61a3eb264b5c3d0d42fc4615a2 relaxed View 20170616
-
-P0896R4 ``The One Ranges Proposal''~(\cite{p0896}) introduced the \tcode{View}
-concept into the \Cpp working draft. \tcode{View} refines \tcode{Semiregular}
-which refines \tcode{Copyable} in order that \tcode{View}s may be used in ways
-similar to \tcode{Iterator}s which also refine \tcode{Semiregular}.
-\tcode{Semiregular}ity combined with the constant-time complexity requirement on
-\tcode{View} and \tcode{Iterator} operations allows them to copied freely by
+\section{background}
+P0896R4 ``The One Ranges Proposal''~\cite{p0896} introduced the \libconcept{View}
+concept into the \Cpp working draft. \libconcept{View} refines \libconcept{Semiregular}
+which refines \libconcept{Copyable} in order that \libconcept{View}s may be used in ways
+similar to \libconcept{Iterator}s which also refine \libconcept{Semiregular}.
+\libconcept{Semiregular}ity combined with the constant-time complexity requirement on
+\libconcept{View} and \libconcept{Iterator} operations allows them to copied freely by
 range adaptors and the range adaptor closure object machinery used in
-\tcode{View} composition. Since general \tcode{Range} types aren't required to
-support such usage, they are in some sense second-class citizens in \tcode{View}
+\libconcept{View} composition. Since general \libconcept{Range} types aren't required to
+support such usage, they are in some sense second-class citizens in \libconcept{View}
 composition.
 
+C++11 added move-only types to the language. Parts of the Standard Library have
+adapted to better support move-only types, for example, we can store them in
+containers. Other parts of the library have been reluctant to do so: the
+algorithms
+- with the exception of the serial overload of \tcode{std::for_each} -
+still require copyable function objects, for example, and we still don't have a
+mechanism to type erase move-only function objects. It behooves us to consider
+whether the Ranges view composition machinery added by P0896R4 should support
+move-only types by admitting move-only views.
 
-C++17 [iterator.requirements.general]/1 states:
+Some examples to consider:
+\begin{itemize}
+\item \tcode{single_view}\cxxiref{range.single.view} requires its element to model
+  \libconcept{CopyConstructible}. The element is stored inside an
+  \tcode{optional}-like wrapper in the \tcode{single_view} object, so the
+  element must model \libconcept{CopyConstructible} in order for the
+  \tcode{single_view} to model \libconcept{Semiregular}. If \libconcept{View}'s
+  copyability requirement were relaxed, \tcode{single_view} could support types
+  that only model \libconcept{MoveConstructible}.
+\item \tcode{filter_view} and \tcode{transform_view} each hold a function object.
+  Those function objects are similarly required to be \libconcept{CopyConstructible}
+  only so the view can model \libconcept{Semiregular}.
+\end{itemize}
+
+\section{Why views but not function object arguments?}
+
+We've managed to put off supporting move-only types in standard library
+algorithms on the basis that there's a simple workaround: add a layer of
+indirection! If you can't call
+\tcode{std::ranges::find_if(myvec, move_only_predicate)}
+with your move-only function object, call
+\tcode{std::ranges::find_if(myvec, std::ref(move_only_predicate))}
+instead. This solution typically isn't a burden since calls to algorithms
+typically occur in straight-line code that already has named objects for the
+range / iterator arguments. If you want to pass an rvalue move-only function
+object to an algorithm, stuff it into a named object as well and use
+\tcode{std::ref}.
+
+View composition differs fundamentally from a series of algorithm calls. Instead
+of a series of statements interleaved with declarations, a view composition
+expression is a composition of nested function calls, possibly disguised with
+the \tcode{|} operator to give it a more linear appearance, that yields a view.
+There's nowhere to store intermediate results and no mechanism to name
+temporaries in "the middle" of such an expression. It's necessary to
+find a place to store the move-only range, pass an lvalue into view composition,
+and somehow ensure that the stored range outlives the composed view. This
+can be challenging when a function wants to return the result of composition of
+a local move-only range with some sequence of range adaptors.
+
+Another important difference is that \libconcept{View} is a concept that's exported
+for users to utilize in their own programs, whereas the requirement that the
+algorithms need copyable function objects is only words in a specification. WG21
+can relax a requirement expressed in specification text any time we like simply
+by changing the words - conforming implementations must ensure they handle the
+relaxed requirements, but there's no possiblity of breaking user programs.
+Conversely, the set of requirements expressed by a concept in the Standard can
+never change without potential breakage: if we strengthen a concept, existing
+callers of standard library components constrained with that concept may be
+broken. If we weaken a concept, third-party library components constrained with
+that concept are broken by suddenly becoming underconstrained. We have one
+chance to get concepts right.
+
+\section{Coroutines on the horizon}
+
+Generators are the intersection of coroutines and ranges. A generator is, simply
+enough, a coroutine that models the \libconcept{Range} concept. A user writes a
+function whose return type is a generator type that \tcode{co_yield}s
+successive elements of the range
+(\href{https://wandbox.org/permlink/kxHIkGckrCWXnMxr}{LIVE}):
+\begin{codeblock}
+generator<int> fib() {
+  for (int a = 0, b = 1;; a = std::exchange(b, a + b))
+    co_yield a;
+}
+\end{codeblock}
+which is substantially more concise than the equivalent direct implementation of
+such an input range
+(\href{https://wandbox.org/permlink/tlqfMsvXuoz4hSy4}{LIVE}):
+\begin{codeblock}
+struct fib_view {
+  struct iterator {
+    using difference_type = int;
+    using value_type = int;
+
+    int a = 0, b = 1;
+
+    int operator*() const { return a; }
+    iterator& operator++() {
+      a = std::exchange(b, a + b);
+      return *this;
+    }
+    void operator++(int) { ++*this; }
+  };
+
+  auto begin() const { return iterator{}; }
+  auto end() const { return std::unreachable; }
+};
+\end{codeblock}
+Note that the direct range implementation models \libconcept{View}, so it can easily
+pariticipate in view composition - but the same is not true for the generator
+implementation.
+
+Coroutine frames are not copyable resources, so it's not possible to implement a
+generator that can produce truly independent copies. It is possible to implement
+a generator that is as \libconcept{Semiregular} as are input
+iterators\footnote{With thanks to Lewis Baker.}, but only by invoking the same
+spooky-action-at-distance that input iterators have in which operations
+performed on an input iterator (or generator) can potentially invalidate the
+copies. \libconcept{Movable}-but-not-\libconcept{Copyable} input iterators (or generators)
+would avoid this issue. While it may be too late for us to solve the problem for
+input iterators, it would seem a shame to repeat the design error with
+generators.
+
+\section{What about range adaptors that want to copy \libconcept{View}s?}
+The range adaptors in the working draft - and the range adaptors in range-v3 -
+only copy views in one circumstance: when a user calls the \tcode{base()}
+member function to retrieve a copy of the underlying view being adapted. None of
+the adaptors copy views in the process of their normal operation. In fact, no
+one has suggested to the author a potential design for a range adaptor which
+\emph{does} need to copy a view.
+
+On the other hand, we \emph{do} have concrete examples of types
+that would like to model \libconcept{View}
+which are not copyable. The evidence suggests that we should relax the
+copyability requirement of \libconcept{View} now, and if and when an adaptor is
+discovered which does need to copy a view it can be constrained with
+\tcode{View<T> \&\& Copyable<T>} along with the added semantic requirement that
+copies are O(1). We could introduce a \tcode{CopyableView} concept with these
+requirements when that day comes to ease using this constraint, although the
+lack of any suggestion of an adaptor that needs the constraint suggests it would
+be premature to standardize such a concept now.
+
+\section{Does this mean containers can be views?}
+Potentially yes, although there are some messy details. \libconcept{View} should
+require O(1) destruction as well as the current requirement for O(1) copies and
+moves - which lack the proposed wording below corrects - which rules out many
+containers. Allocator-aware containers also notably only have O(1) move assignment when
+their allocator has specific properties. This paper does not propose any changes
+to allow \tcode{View} to accept container types that would otherwise be rejected
+by the \tcode{enable_view} heuristic, but that is a potential avenue for future
+work.
+
+Eric Niebler has expressed concerns to the author in private communication about
+such a change muddying the Ranges design, with which the author agrees: we need
+to tread very carefully here.
+
+
+\chapter{Proposal}
+Put simply, the proposal is to remove the copyability requirement from the
+\libconcept{View} concept as defined in \cxxref{range.view}:
+\begin{codeblock}
+template<class T>
+  concept View =
+    Range<T> && Semiregular<T> && enable_view<T>;
+\end{codeblock}
+by decomposing \tcode{Semiregular<T>} into \tcode{Copyable<T> \&\&
+DefaultConstructible<T>} and then replacing \libconcept{Copyable} with
+\libconcept{Movable}:
+\begin{codeblock}
+template<class T>
+  concept View =
+    Range<T> && Movable<T> && DefaultConstructible<T> && enable_view<T>;
+\end{codeblock}
+This allows for move-only types to model \libconcept{View} without excluding any
+types which model the prior formulation of the concept.
+
+Note that
+\href{https://github.com/ericniebler/range-v3/commit/11fb1f0c6ef60a61a3eb264b5c3d0d42fc4615a2}{
+a similar relaxation that only applies to single-pass (input and output) views}
+has been implemented in range-v3~\cite{range-v3} since June of 2017
+\href{https://github.com/ericniebler/range-v3/commit/d2bd910faa75d9016f6fb124f9de46c926c49c72}{
+along with the experimental range generator implementation}.
+
+To redress the problem that the \tcode{base()} members of the range adaptors
+return copies of the underlying view, we propose that each such \tcode{base()}
+member be replaced to by two overloads: a \tcode{const}-qualified overload that
+requires the type of the underlying view to model \tcode{CopyConstructible}, and
+a \tcode{\&\&}-qualified overload that extracts the underlying view from the
+adaptor (thus leaving it invalid).
+
+
+\chapter{Technical specifications}
+Change \cxxref{range.req.general}/2 as follows \begin{note}There's a drive-by
+edit here to require O(1) destruction: the intent has always been that
+\libconcept{View}s have only constant-time operations, we apparently forgot that
+destruction is an operation.\end{note}:
 \begin{quote}
-... An iterator \tcode{i} for which the expression \tcode{(*i).m} is well-defined
-supports the expression \tcode{i->m} with the same semantics as \tcode{(*i).m}. ...
-\end{quote}
-Input iterators are required to support the \tcode{->}
-operator\cxxiref{input.iterators},
-and \tcode{move_iterator} is an input iterator,
-so \tcode{move_iterator}'s arrow operator must satisfy that requirement, right?
-Sadly, it does not.
-
-For a \tcode{move_iterator}, \tcode{*i} is an xvalue, so \tcode{(*i).m} is also
-an xvalue. \tcode{i->m}, however, is an lvalue. Consequently, \tcode{(*i).m} and
-\tcode{i->m} can produce observably different behaviors as subexpressions - they
-are not substitutable, as would be expected from a strict reading of ``with the
-same semantics.'' The fact that \tcode{->} cannot be implemented with ``the same
-semantics'' for iterators whose reference type is an rvalue was the primary
-motivation for removing the \tcode{->} requirement from the Ranges iterator
-concepts. It would benefit users to deprecate \tcode{move_iterator}'s
-\tcode{operator->} in C++20 as an indication that its semantics are \textit{not}
-equivalent and that it will ideally go away some day.
-
-\rSec1[disarm.words]{Technical Specifications}
-
-\begin{itemize}
-\item Strike \tcode{move_iterator::operator->} from the class template synopsis
-  in [move.iterator]:
-  \begin{quote}
-  \begin{codeblock}
-namespace std {
-  template<class Iterator>
-  class move_iterator {
-    [...]
-    constexpr iterator_type base() const;
-    constexpr reference operator*() const;
-    @\removed{constexpr pointer operator->() const;}@
-
-    constexpr move_iterator& operator++();
-    constexpr auto operator++(int);
-    [...]
-  };
-}
-  \end{codeblock}
-  \end{quote}
-\item Relocate the detailed specification of \tcode{move_iterator::operator->}
-  from [move.iter.elem]:
-  \begin{quote}
-\begin{itemdecl}
-constexpr reference operator*() const;
-\end{itemdecl}
-\setcounter{Paras}{0}
-\begin{itemdescr}
-\pnum \effects Equivalent to: \tcode{return ranges::iter_move(current);}
-\end{itemdescr}
-\begin{removedblock}
-\begin{itemdecl}
-constexpr pointer operator->() const;
-\end{itemdecl}
-\begin{itemdescr}
-\pnum \returns \tcode{current}.
-\end{itemdescr}
-\end{removedblock}
-\begin{itemdecl}
-constexpr reference operator[](difference_type n) const;
-\end{itemdecl}
-\begin{itemdescr}
-\pnum \effects Equivalent to: \tcode{ranges::iter_move(current + n);}
-\end{itemdescr}
-  \end{quote}
-  to a new subclause ``Deprecated \tcode{move_iterator} access'' in Annex D
-  between \cxxref{depr.iterator.primitives} and \cxxref{depr.util.smartptr.shared.atomic}:
-  \begin{quote}
-  \begin{addedblock}
-\setcounter{Paras}{0}
-\pnum
-The following member is declared in addition to those members specified in
-\cxxref{move.iterator.elem}:
-\begin{codeblock}
-namespace std {
-  template<class Iterator>
-  class move_iterator {
-  public:
-    constexpr pointer operator->() const;
-  };
-}
-\end{codeblock}
-\begin{itemdecl}
-constexpr pointer operator->() const;
-\end{itemdecl}
-\begin{itemdescr}
-\pnum \returns \tcode{current}.
-\end{itemdescr}
-  \end{addedblock}
-  \end{quote}
-\end{itemize}
-
-
-\rSec0[ref]{\placeholder{ref-view} => \tcode{ref_view}}
-
-The authors of P0896 added the exposition-only view type \placeholder{ref-view}
-(P0896R4 \cxxref{range.view.ref}) to serve as the return type of  \tcode{view::all}
-(\cxxref{range.adaptors.all}) when passed an lvalue container.
-\tcode{\placeholder{ref-view}<T>} is an ``identity view adaptor'' --
-an adaptor which produces a view containing all the elements of the underlying
-range exactly -- of a \libconcept{Range} of type \tcode{T} whose representation
-consists of a \tcode{T*}. A \tcode{\placeholder{ref-view}} delegates all
-operations through that pointer to the underlying \libconcept{Range}.
-
-The LEWG-approved design from
-P0789R3 ``Range Adaptors and Utilities''~(\cite{P0789})
-used \tcode{subrange<iterator_t<R>, sentinel_t<R>>} as the return type of
-\tcode{view::all(c)} for an lvalue \tcode{c} of type \tcode{R}.
-\placeholder{ref-view} and \tcode{subrange} are both identity view adaptors, so
-this change has little to no impact on the existing design. Why bother then?
-Despite that replacing \tcode{subrange} with \placeholder{ref-view} in this case
-falls under as-if, \placeholder{ref-view} has some advantages.
-
-Firstly, a smaller representation: \placeholder{ref-view} is a single pointer,
-whereas \tcode{subrange} is an iterator plus a sentinel, and sometimes a size.
-View compositions store many views produced by \tcode{view::all}, and many of
-those are views of lvalue containers in typical usage.
-
-Second, and more significantly, \placeholder{ref-view} is future-proof.
-\placeholder{ref-view} retains the exact type of the underlying
-\libconcept{Range}, whereas \tcode{subrange} erases down to the
-\libconcept{Range}'s iterator and sentinel type. \placeholder{ref-view}
-can therefore easily model any and all concepts that the underlying range models
-simply by implementing any required expressions via delegating to the actual
-underlying range, but \tcode{subrange} must store somewhere in its
-representation any properties of the underlying range needed to model a
-concept which it cannot retrieve from an iterator and sentinel. For example,
-\tcode{subrange} must store a size to model \libconcept{SizedRange} when the
-underlying range is sized but does not have an iterator and sentinel that model
-\libconcept{SizedSentinel}. If we discover in the future that it is desirable
-to have the \libconcept{View} returned by \tcode{view::all(container)} model
-additional concepts, we will likely be blocked by ABI concerns with
-\tcode{subrange} whereas \placeholder{ref-view} can simply add more member
-functions and leave its representation unchanged.
-
-We've already realized these advantages for view composition by adding
-\placeholder{ref-view} as an exposition-only \libconcept{View} type returned
-by \tcode{view::all}, but users may like to use it as well as a sort of "Ranges
-\tcode{reference_wrapper}".
-
-\rSec1[ref.words]{Technical Specifications}
-
-\begin{itemize}
-\item Update references to the name \placeholder{ref-view} to
-  \tcode{ref_view} in \cxxref{range.adaptors.all}/2:
-  \begin{quote}
-\setcounter{Paras}{1}
-\pnum
-The name \tcode{view::all} denotes a range adaptor
-object\cxxiref{range.adaptor.object}. For some subexpression \tcode{E},
-the expression \tcode{view::all(E)} is expression-equivalent to:
-
-\begin{itemize}
-\item \tcode{\placeholdernc{DECAY_COPY}(E)} if the decayed type of \tcode{E}
-models \libconcept{View}.
-
-\item Otherwise,
-\tcode{\changed{\placeholder{ref-view}\{E\}}{ref_view\{E\}}} if that
-expression is well-formed\removed{, where \tcode{\placeholder{ref-view}}
-is the exposition-only \libconcept{View} specified below}.
-
-\item Otherwise, \tcode{subrange\{E\}}.
-\end{itemize}
-
-  \end{quote}
-\item Change the stable name \cxxref{range.view.ref} to [range.ref.view] (for consistency with the stable names of the other view classes defined in \cxxref{range}), retitle to ``class template \tcode{ref_view}'' and modify as
-  follows:
-  \begin{quote}
-\setcounter{Paras}{0}
-\pnum
-\tcode{\added{ref_view}}\added{ is a \libconcept{View} of the elements of some other \libconcept{Range}.}
-
-\begin{codeblock}
-namespace std::ranges {
-  template<Range R>
-    requires is_object_v<R>
-  class @\changed{\placeholder{ref_view}}{ref_view}@ : public view_interface<@\changed{\placeholder{ref_view}}{ref_view}@<R>> {
-  private:
-    R* r_ = nullptr; // \expos
-  public:
-    constexpr @\changed{\placeholder{ref_view}}{ref_view}@() noexcept = default;
-
-    template<@\placeholder{not-same-as}<\changed{\placeholder{ref-view}}{ref_view}@> T>
-      requires @\seebelow@
-    constexpr @\changed{\placeholder{ref_view}}{ref_view}@(T&& t);
-
-    constexpr R& base() const;
-
-    constexpr iterator_t<R> begin() const { return ranges::begin(*r_); }
-    constexpr sentinel_t<R> end() const { return ranges::end(*r_); }
-
-    constexpr bool empty() const
-      requires requires { ranges::empty(*r_); }
-    { return ranges::empty(*r_); }
-
-    constexpr auto size() const requires SizedRange<R>
-    { return ranges::size(*r_); }
-
-    constexpr auto data() const requires ContiguousRange<R>
-    { return ranges::data(*r_); }
-
-    friend constexpr iterator_t<R> begin(@\changed{\placeholder{ref_view}}{ref_view}@ r)
-    { return r.begin(); }
-
-    friend constexpr sentinel_t<R> end(@\changed{\placeholder{ref_view}}{ref_view}@ r)
-    { return r.end(); }
-  };
-}
-\end{codeblock}
-
-\setcounter{Paras}{0}
-\begin{itemdecl}
-template<@\placeholder{not-same-as}<\changed{\placeholder{ref-view}}{ref_view}@> T>
-  requires @\seebelow@
-constexpr @\changed{\placeholder{ref_view}}{ref_view}@(T&& t);
-\end{itemdecl}
-
-\begin{itemdescr}
-[...]
-\end{itemdescr}
-  \end{quote}
-\end{itemize}
-
-
-\rSec0[untemp]{Comparison function object untemplates}
-
-During LWG review of P0896's comparison function objects
-(P0896R3 [range.comparisons]) we were asked, ``Why are we propagating the design
-of the \tcode{std} comparison function objects, i.e. class templates that you
-shouldn't specialize because they cannot be specialized consistently with the
-\tcode{void} specializations that you actually should be using?'' For the Ranges
-TS, it was a design goal to minimize differences between \tcode{std} and
-\tcode{ranges} to ease transition and experimentation. For the Standard, our
-goal should not be to minimize differences but to produce the best design. (As
-was evidenced by the LEWG poll in Rapperswil suggesting that we should not be
-afraid to diverge \tcode{std} and \tcode{ranges} components when there are reasons
-to do so.)
-
-Absent a good reason to mimic the \tcode{std} comparison function objects
-exactly, we propose un-\tcode{template}-ing the \tcode{std::ranges} comparion
-function objects, leaving only concrete classes with the same behavior as the
-prior \tcode{void} specializations.
-
-\rSec1[untemp.words]{Technical specifications}
-
-In [functional.syn], modify the declarations of the \tcode{ranges}
-comparison function objects as follows:
-\begin{codeblock}
-  [...]
-
-  namespace ranges {
-    // \cxxref{range.comparisons}, comparisons
-    @\removed{template<class T = void>}@
-      @\removed{requires \seebelow}@
-    @\removed{struct equal_to;}@
-
-    @\removed{template<class T = void>}@
-      @\removed{requires \seebelow}@
-    @\removed{struct not_equal_to;}@
-
-    @\removed{template<class T = void>}@
-      @\removed{requires \seebelow}@
-    @\removed{struct greater;}@
-
-    @\removed{template<class T = void>}@
-      @\removed{requires \seebelow}@
-    @\removed{struct less;}@
-
-    @\removed{template<class T = void>}@
-      @\removed{requires \seebelow}@
-    @\removed{struct greater_equal;}@
-
-    @\removed{template<class T = void>}@
-      @\removed{requires \seebelow}@
-    @\removed{struct less_equal;}@
-
-    @\removed{template<>}@ struct equal_to@\removed{<void>}@;
-    @\removed{template<>}@ struct not_equal_to@\removed{<void>}@;
-    @\removed{template<>}@ struct greater@\removed{<void>}@;
-    @\removed{template<>}@ struct less@\removed{<void>}@;
-    @\removed{template<>}@ struct greater_equal@\removed{<void>}@;
-    @\removed{template<>}@ struct less_equal@\removed{<void>}@;
-  }
-
-  [...]
-\end{codeblock}
-
-Update the specifications in \cxxref{range.comparisons} as well:
-
-\setcounter{Paras}{1}
-\pnum
-There is an implementation-defined strict total ordering over all pointer values
-of a given type. This total ordering is consistent with the partial order imposed
-by the builtin operators \tcode{<}, \tcode{>}, \tcode{<=}, and \tcode{>=}.
-
-\begin{removedblock}
-\begin{itemdecl}
-template<class T = void>
-  requires EqualityComparable<T> || Same<T, void> || @\placeholdernc{BUILTIN_PTR_CMP}@(const T&, ==, const T&)
-struct equal_to {
-  constexpr bool operator()(const T& x, const T& y) const;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\tcode{return ranges::equal_to<>\{\}(x, y);}
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class T = void>
-  requires EqualityComparable<T> || Same<T, void> || @\placeholdernc{BUILTIN_PTR_CMP}@(const T&, ==, const T&)
-struct not_equal_to {
-  constexpr bool operator()(const T& x, const T& y) const;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\tcode{return !ranges::equal_to<>\{\}(x, y);}
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class T = void>
-  requires StrictTotallyOrdered<T> || Same<T, void> || @\placeholdernc{BUILTIN_PTR_CMP}@(const T&, <, const T&)
-struct greater {
-  constexpr bool operator()(const T& x, const T& y) const;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\tcode{return ranges::less<>\{\}(y, x);}
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class T = void>
-  requires StrictTotallyOrdered<T> || Same<T, void> || @\placeholdernc{BUILTIN_PTR_CMP}@(const T&, <, const T&)
-struct less {
-  constexpr bool operator()(const T& x, const T& y) const;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\tcode{return ranges::less<>\{\}(x, y);}
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class T = void>
-  requires StrictTotallyOrdered<T> || Same<T, void> || @\placeholdernc{BUILTIN_PTR_CMP}@(const T&, <, const T&)
-struct greater_equal {
-  constexpr bool operator()(const T& x, const T& y) const;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\tcode{return !ranges::less<>\{\}(x, y);}
-\end{itemdescr}
-
-\begin{itemdecl}
-template<class T = void>
-  requires StrictTotallyOrdered<T> || Same<T, void> || @\placeholdernc{BUILTIN_PTR_CMP}@(const T&, <, const T&)
-struct less_equal {
-  constexpr bool operator()(const T& x, const T& y) const;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\tcode{return !ranges::less<>\{\}(y, x);}
-\end{itemdescr}
-\end{removedblock}
-
-\begin{itemdecl}
-@\removed{template<>}@ struct equal_to@\removed{<void>}@ {
-  template<class T, class U>
-    requires EqualityComparableWith<T, U> || @\placeholdernc{BUILTIN_PTR_CMP}@(T, ==, U)
-  constexpr bool operator()(T&& t, U&& u) const;
-
-  using is_transparent = @\unspecnc@;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\expects
-If the expression \tcode{std::forward<T>(t) == std::forward<U>(u)}
-results in a call to a built-in operator \tcode{==} comparing pointers of type
-\tcode{P}, the conversion sequences from both \tcode{T} and \tcode{U} to \tcode{P}
-shall be equality-preserving\cxxiref{concepts.equality}.
-
-\pnum
-\effects
-\begin{itemize}
-\item
-  If the expression \tcode{std::forward<T>(t) == std::forward<U>(u)} results in
-  a call to a built-in operator \tcode{==} comparing pointers of type \tcode{P}:
-  returns \tcode{false} if either (the converted value of) \tcode{t} precedes
-  \tcode{u} or \tcode{u} precedes \tcode{t} in the implementation-defined strict
-  total order over pointers of type \tcode{P} and otherwise \tcode{true}.
-
-\item
-  Otherwise, equivalent to:
-  \tcode{return std::forward<T>(t) == std::forward<U>(u);}
-\end{itemize}
-\end{itemdescr}
-
-\begin{itemdecl}
-@\removed{template<>}@ struct not_equal_to@\removed{<void>}@ {
-  template<class T, class U>
-    requires EqualityComparableWith<T, U> || @\placeholdernc{BUILTIN_PTR_CMP}@(T, ==, U)
-  constexpr bool operator()(T&& t, U&& u) const;
-
-  using is_transparent = @\unspecnc@;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\begin{codeblock}
-return !ranges::equal_to@\removed{<>}@{}(std::forward<T>(t), std::forward<U>(u));
-\end{codeblock}
-\end{itemdescr}
-
-\begin{itemdecl}
-@\removed{template<>}@ struct greater@\removed{<void>}@ {
-  template<class T, class U>
-    requires StrictTotallyOrderedWith<T, U> || @\placeholdernc{BUILTIN_PTR_CMP}@(U, <, T)
-  constexpr bool operator()(T&& t, U&& u) const;
-
-  using is_transparent = @\unspecnc@;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\begin{codeblock}
-return ranges::less@\removed{<>}@{}(std::forward<U>(u), std::forward<T>(t));
-\end{codeblock}
-\end{itemdescr}
-
-\begin{itemdecl}
-@\removed{template<>}@ struct less@\removed{<void>}@ {
-  template<class T, class U>
-    requires StrictTotallyOrderedWith<T, U> || @\placeholdernc{BUILTIN_PTR_CMP}@(T, <, U)
-  constexpr bool operator()(T&& t, U&& u) const;
-
-  using is_transparent = @\unspecnc@;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\expects
-If the expression \tcode{std::forward<T>(t) < std::forward<U>(u)} results in a
-call to a built-in operator \tcode{<} comparing pointers of type \tcode{P}, the
-conversion sequences from both \tcode{T} and \tcode{U} to \tcode{P} shall be
-equality-preserving\cxxiref{concepts.equality}. For any expressions
-\tcode{ET} and \tcode{EU} such that \tcode{decltype((ET))} is \tcode{T} and
-\tcode{decltype((EU))} is \tcode{U}, exactly one of
-\tcode{ranges::less\removed{<>}\{\}(ET, EU)},
-\tcode{ranges::less\removed{<>}\{\}(EU, ET)}, or
-\tcode{ranges::equal_to\removed{<>}\{\}(ET, EU)}
-shall be \tcode{true}.
-
-\pnum
-\effects
-\begin{itemize}
-\item
-If the expression \tcode{std::forward<T>(t) < std::forward<U>(u)} results in a
-call to a built-in operator \tcode{<} comparing pointers of type \tcode{P}:
-returns \tcode{true} if (the converted value of) \tcode{t} precedes \tcode{u} in
-the implementation-defined strict total order over pointers of type \tcode{P}
-and otherwise \tcode{false}.
-
-\item
-Otherwise, equivalent to:
-\tcode{return std::forward<T>(t) < std::forward<U>(u);}
-\end{itemize}
-\end{itemdescr}
-
-\begin{itemdecl}
-@\removed{template<>}@ struct greater_equal@\removed{<void>}@ {
-  template<class T, class U>
-    requires StrictTotallyOrderedWith<T, U> || @\placeholdernc{BUILTIN_PTR_CMP}@(T, <, U)
-  constexpr bool operator()(T&& t, U&& u) const;
-
-  using is_transparent = @\unspecnc@;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\begin{codeblock}
-return !ranges::less@\removed{<>}@{}(std::forward<T>(t), std::forward<U>(u));
-\end{codeblock}
-\end{itemdescr}
-
-\begin{itemdecl}
-@\removed{template<>}@ struct less_equal@\removed{<void>}@ {
-  template<class T, class U>
-    requires StrictTotallyOrderedWith<T, U> || @\placeholdernc{BUILTIN_PTR_CMP}@(U, <, T)
-  constexpr bool operator()(T&& t, U&& u) const;
-
-  using is_transparent = @\unspecnc@;
-};
-\end{itemdecl}
-
-\begin{itemdescr}
-\pnum
-\tcode{operator()} has effects equivalent to:
-\begin{codeblock}
-return !ranges::less@\removed{<>}@{}(std::forward<U>(u), std::forward<T>(t));
-\end{codeblock}
-\end{itemdescr}
-
-Strip \tcode{<>} from occurrences of \tcode{ranges::equal_to<>},
-\tcode{ranges::less<>}, etc. in: [defns.projection], [iterator.synopsis],
-[commonalgoreq.general]/2, [commonalgoreq.mergeable], [commonalgoreq.sortable],
-[range.syn], [range.adaptors.split_view], [algorithm.syn], [alg.find],
-[alg.find.end], [alg.find.first.of], [alg.adjacent.find], [alg.count],
-[alg.mismatch], [alg.equal], [alg.is_permutation], [alg.search], [alg.replace],
-[alg.remove], [alg.unique], [sort], [stable.sort], [partial.sort],
-[partial.sort.copy], [is.sorted], [alg.nth.element], [lower.bound],
-[upper.bound], [equal.range], [binary.search], [alg.merge], [includes],
-[set.union], [set.intersection], [set.difference], [set.symmetr\-ic.difference],
-[push.heap], [pop.heap], [make.heap], [sort.heap], [is.heap], [alg.min.max],
-[alg.lex.comparison], and [alg.permutation.generators].
-
-
-\rSec0[weiv_esrever]{Reversing a \tcode{reverse_view}}
-
-\tcode{view::reverse} in P0896 is a range adaptor that produces a
-\tcode{reverse_view} which presents the elements of the underlying range
-in reverse order - from back to front. \tcode{reverse_view} does so via
-the expedient mechanism of adapting the underlying view's iterators with
-\tcode{std::reverse_iterator}. Reversing a \tcode{reverse_view} produces a view
-of the elements of the original range in their original order. While this
-behavior is \tcode{correct}, it is likely to exhibit poor performance.
-
-We propose that the effect of \tcode{view::reverse(r)} when \tcode{r} is an
-instance of \tcode{reverse_view} should be to simply return the underlying view
-directly. This behavior is both simple to specify and efficient to implement.
-
-Similarly, reversing a \tcode{subrange} whose iterator and sentinel are
-\tcode{reverse_iterator}s can be made more efficient by yielding a
-\tcode{subrange} of "unwrapped" iterators. Note that in this case we should
-take care to preserve any stored size information in the original subrange,
-since the size of the unwrapped base range is the same.
-
-\rSec1[sdrow.weiv_esrever]{Technical specifications}
-
-\begin{itemize}
-\item Modify the specification of \tcode{view::reverse} in
-  \cxxref{range.reverse.adaptor} as follows:
-  \begin{quote}
-\pnum
-The name \tcode{view::reverse} denotes a
-range adaptor object\cxxiref{range.adaptor.object}.
-For some subexpression \tcode{E}, the expression
-\tcode{view::reverse(E)} is expression-equivalent to\added{:}
-\tcode{\removed{reverse_view\{E\}}}\removed{.}
-\begin{addedblock}
-\begin{itemize}
-\item If the type of \tcode{E} is a (possibly cv-qualified)
-  specialization of \tcode{reverse_view}, \tcode{E.base()}.
-\item Otherwise, if the type of \tcode{E} is cv-qualified
-  \begin{codeblock}
-  subrange<reverse_iterator<I>, reverse_iterator<I>, K>
-  \end{codeblock}
-  for some iterator type \tcode{I} and
-  value \tcode{K} of \tcode{subrange_kind},
-  \begin{codeblock}
-  subrange<I, I, K>(E.end().base(), E.begin().base(), E.size())
-  \end{codeblock}
-  if \tcode{K} is \tcode{subrange_kind::sized} and
-  \begin{codeblock}
-  subrange<I, I, K>(E.end().base(), E.begin().base())
-  \end{codeblock}
-  otherwise, except that in either case \tcode{E} is evaluated only once.
-\item Otherwise, \tcode{reverse_view\{E\}}.
-\end{itemize}
-\end{addedblock}
-  \end{quote}
-\end{itemize}
-
-
-\rSec0[dangle]{Use cases left \tcode{dangling}}
-
-What does this program fragment do in P0896?
-\begin{codeblock}
-std::vector<int> f();
-o = std::ranges::copy(f(), o).out;
-\end{codeblock}
-how about this one:
-\begin{codeblock}
-std::ranges::copy(f(), std::ostream_iterator<int>{std::cout});
-\end{codeblock}
-The correct answer is, ``These fragments are ill-formed because the iterator into
-the input range that \tcode{ranges::copy} returns would dangle - despite that
-the program fragment ignores that value - because LEWG asked us to remove the
-\tcode{dangling} wrapper and make such calls ill-formed.''
-
-In the Ranges TS / revision one of P0896 an algorithm that returns an iterator
-into a range that was passed as an rvalue argument first wraps that iterator
-with the \tcode{dangling} wrapper template. A caller must retrieve the iterator
-value from the wrapper by calling a member function, opting in to potentially
-dangerous behavior explicitly. The use of \tcode{dangling} here makes it
-impossible for a user to inadvertently use an iterator that dangles.
-
-In practice, the majority of range-v3 users in an extremely rigorous poll of the
-\tcode{\#ranges} Slack channel (i.e., the author and two people who responded)
-never extract the value from a \tcode{dangling} wrapper. We prefer to always
-pass lvalue ranges to algorithms when we plan to use the returned iterator, and
-use \tcode{dangling} only as a tool to help us avoid inadvertent use of
-potentially dangling iterators. Unfortunately, P0896 makes calls that would have
-used \tcode{dangling} in the TS design ill-formed which forces passing ranges
-as lvalues even when the dangling iterator value is not used.
-
-We propose bringing back \tcode{dangling} in a limited capacity as a
-non-template tag type to be returned by calls that would otherwise return a
-dangling iterator value. This change makes the program fragments above
-well-formed, but without introducing the potentially unsafe behavior that LEWG
-found objectionable in the prior \tcode{dangling} design: there's no stored
-iterator value to retrieve.
-
-\rSec1[dangle.words]{Technical specifications}
-
-Modify the \tcode{<ranges>} synopsis in \cxxref{ranges.syn} as follows:
-\begin{quote}
-\begin{codeblock}
-namespace std::ranges {
-  [...]
-
-  // \cxxref{range.range}, Range
-  template<class T>
-    using iterator_t = decltype(ranges::begin(declval<T&>()));
-
-  template<class T>
-    using sentinel_t = decltype(ranges::end(declval<T&>()));
-
-  @\removed{template<\placeholder{fowarding-range} R>}@
-    @\removed{using safe_iterator_t = iterator_t<R>;}@
-
-  template<class T>
-    concept Range = @\seebelownc@;
-
-  [...]
-
-  template<Iterator I, Sentinel<I> S = I, subrange_kind K = @\seebelownc@>
-    requires (K == subrange_kind::sized || !SizedSentinel<S, I>)
-  class subrange;
-
-  @\added{// \cxxref{dangling}, dangling iterator handling}@
-  @\added{struct dangling;}@
-
-  @\added{template<Range R>}@
-    @\added{using safe_iterator_t =}@
-      @\added{conditional_t<\placeholdernc{forwarding-range}<R>, iterator_t<R>, dangling>;}@
-
-  template<@\changed{\placeholder{forwarding-range}}{Range}@ R>
-    using safe_subrange_t =
-      @\added{conditional_t<\placeholder{forwarding-range}<R>,}@ subrange<iterator_t<R>>@\added{, dangling>}@;
-
-  // \cxxref{range.all}, all view
-  namespace view { inline constexpr @\unspec@ all = @\unspecnc@; }
-
-  [...]
-}
-\end{codeblock}
+... The \libconcept{View} concept specifies requirements on a \libconcept{Range} type with
+constant-time \changed{copy and assign}{move} operations \added{and destruction}.
 \end{quote}
 
-Add a new subclause to \cxxref{range.utility}, following \cxxref{range.subrange}:
-
+Change \cxxref{range.view} as follows:
 \begin{quote}
-\begin{addedblock}
-\setcounter{chapter}{23}
-\setcounter{section}{6}
-\setcounter{subsection}{3}
-\rSec2[dangling]{Dangling iterator handling}
 \pnum
-The tag type \tcode{dangling} is used together with the template aliases
-\tcode{safe_iterator_t} and \tcode{safe_subrange_t} to indicate that
-an algorithm that typically returns an iterator into or
-subrange of a \libconcept{Range} argument does not return
-an iterator or subrange which could potentially dangle
-for a particular rvalue \libconcept{Range} argument which
-does not model \libconcept{\placeholder{forwarding-range}}\cxxiref{range.range}.
-
-\begin{codeblock}
-namespace std {
-  struct dangling {
-    constexpr dangling() noexcept = default;
-    template<class... Args>
-      constexpr dangling(Args&&...) noexcept { }
-  };
-}
-\end{codeblock}
+The \libconcept{View} concept specifies the requirements of a \libconcept{Range} type
+that has constant time \removed{copy,} move\added{ construction},
+\added{move} assignment\added{, and destruction} \removed{operators}; that is,
+the cost of these operations is not proportional to
+the number of elements in the \libconcept{View}.
 
 \pnum
 \begin{example}
-\begin{codeblock}
-vector<int> f();
-auto result1 = ranges::find(f(), 42); // \#1
-static_assert(Same<decltype(result1), dangling>);
-auto vec = f();
-auto result2 = ranges::find(vec, 42); // \#2
-static_assert(Same<decltype(result2), vector<int>::iterator>);
-auto result3 = ranges::find(subrange{vec}, 42); // \#3
-static_assert(Same<decltype(result3), vector<int>::iterator>);
-\end{codeblock}
-The call to \tcode{ranges::find} at \#1 returns \tcode{dangling} since
-\tcode{f()} is an rvalue \tcode{vector}; the \tcode{vector} could potentially
-be destroyed before a returned iterator is dereferenced. However, the calls
-at \#2 and \#3 both return iterators since the lvalue \tcode{vec} and
-specializations of \tcode{subrange} model \libconcept{forwarding-range}.
+Examples of \tcode{View}s are:
+
+\begin{itemize}
+\item A \libconcept{Range} type that wraps a pair of iterators.
+
+\item A \libconcept{Range} type that holds its elements by \tcode{shared_ptr}
+and shares ownership with all its copies.
+
+\item A \libconcept{Range} type that generates its elements on demand.
+\end{itemize}
+
+Most containers\cxxiref{containers} are not views since
+\changed{copying}{destruction of} the container \changed{copies}{destroys} the
+elements, which cannot be done in constant time.
 \end{example}
-\end{addedblock}
+
+\indexlibrary{\idxcode{enable_view}}%
+\indexlibrary{\idxcode{View}}%
+\begin{itemdecl}
+template<class T>
+  inline constexpr bool enable_view = @\seebelow@;
+
+template<class T>
+  concept View =
+    Range<T> && Semiregular<T> && enable_view<T>;
+\end{itemdecl}
+
+\begin{codeblock}
+template<class T>
+  concept View =
+    Range<T> && @\changed{Semiregular<T>}{Movable<T> \&\& DefaultConstructible<T>}@ && enable_view<T>;
+\end{codeblock}
 \end{quote}
 
+Change \cxxref{range.filter.view} as follows:
+\begin{quote}
+\begin{codeblock}
+namespace std::ranges {
+  template<InputRange V, IndirectUnaryPredicate<iterator_t<V>> Pred>
+    requires View<V> && is_object_v<Pred>
+  class filter_view : public view_interface<filter_view<V, Pred>> {
+    [...]
+    constexpr filter_view(R&& r, Pred pred);
 
-%% \setcounter{chapter}{7}
-%% \rSec0[sub.headers]{Headers \tcode{iterator_}- and \tcode{range_concepts}}
-%%
-%% When defining an iterator/container/algorithm it's extremely likely that I need
-%% the iterator/range concepts/traits/operations in the
-%% \tcode{<iterator>}/\tcode{<ranges>} headers, but substantially less likely that I
-%% need the iterator/range adaptors. Indeed, while the ``support machinery'' in
-%% these headers is static, the set of useful adaptors is effectively unbounded and
-%% will grow over time as more are proposed.
-%%
-%% In the interests of reducing the cost of transitive includes that my
-%% iterator/container/algorithm header imposes on users, it would be useful if the
-%% support machinery in \tcode{<iterator>}/\tcode{<ranges>} were split out into
-%% separate \tcode{<iterator_support>}/\tcode{<ranges_support>}
-%% (\tcode{<_base>}? \tcode{<_concepts>}?) headers which the base
-%% headers include.
-%%
-%% \rSec1[sub.headers.words]{Technical specifications}
-%%
-%% Split [iterator.synopsis] between the ``range iterator operations'' and
-%% ``predefined iterators and sentinels'', naming the new first subclause
-%% ``Header \tcode{<iterator_support>} synopsis'' with stable name
-%% [iterator.support.syn]. At what is now the beginning of the \tcode{<iterator>}
-%% synopsis, add \tcode{\#include <iterator_support>}.
-%%
-%% Similarly split [range.syn] between the declarations of the \tcode{all_view}
-%% alias and the \tcode{filter_view} view adaptor, naming the new first subclause
-%% ``Header \tcode{<ranges_support>} synopsis'' with stable name
-%% [range.support.syn]. At what is now the beginning of the \tcode{<ranges>}
-%% synopsis, add \tcode{\#include <ranges_support>}. Relocate the declarations
-%% directly in namespace \tcode{std} from \tcode{<ranges>}:
-%% \begin{codeblock}
-%%   namespace view = ranges::view;
-%%
-%%   template<class I, class S, ranges::subrange_kind K>
-%%   struct tuple_size<ranges::subrange<I, S, K>>
-%%     : integral_constant<size_t, 2> {};
-%%   template<class I, class S, ranges::subrange_kind K>
-%%   struct tuple_element<0, ranges::subrange<I, S, K>> {
-%%     using type = I;
-%%   };
-%%   template<class I, class S, ranges::subrange_kind K>
-%%   struct tuple_element<1, ranges::subrange<I, S, K>> {
-%%     using type = S;
-%%   };
-%% \end{codeblock}
-%% to the end of \tcode{<ranges_support>}.
+    constexpr V base() const @\added{requires CopyConstructible<V> \{ return base_}; \added{\}}@
+    @\added{constexpr V base() \&\& \{ return std::move(base_); \}}@
+
+    constexpr iterator begin();
+    [...]
+\end{codeblock}
+[...]
+\setcounter{Paras}{2}
+\begin{removedblock}
+\begin{itemdecl}
+constexpr V base() const;
+\end{itemdecl}
+
+\begin{itemdescr}
+\pnum
+\effects Equivalent to: \tcode{return base_;}
+\end{itemdescr}
+\end{removedblock}
+\end{quote}
+Change \cxxref{range.transform.view}, \cxxref{range.take.view},
+\cxxref{range.common.view}, and \cxxref{range.reverse.view} similarly.
+
+Change \cxxref{range.join.view} as follows \begin{note} This is a drive-by fix
+to add \tcode{base} which was unintentionally omitted from \tcode{join_view} and
+\tcode{split_view} in P0896R4.\end{note}:
+\begin{quote}
+\begin{codeblock}
+namespace std::ranges {
+  template<InputRange V>
+    requires View<V> && InputRange<iter_reference_t<iterator_t<V>>> &&
+             (is_reference_v<iter_reference_t<iterator_t<V>>> ||
+              View<iter_value_t<iterator_t<V>>>)
+  class join_view : public view_interface<join_view<V>> {
+    [...]
+    template<InputRange R>
+      requires ViewableRange<R> && Constructible<V, all_view<R>>
+    constexpr explicit join_view(R&& r);
+
+    @\added{constexpr V base() const requires CopyConstructible<V> \{ return base_; \}}@
+    @\added{constexpr V base() \&\& \{ return std::move(base_); \}}@
+
+    constexpr auto begin() {
+    [...]
+\end{codeblock}
+[...]
+\end{quote}
+Add the same definitions to \cxxref{range.split.view} before the first
+definition of \tcode{begin}.
+
+Change \cxxref{range.join.iterator}/6 as follows \begin{note} Yes, I claimed above
+that ``none of the adaptors copy a view in their normal operation'' despite that
+this is an occurrence of exactly that which should properly be a move. Sue me.\end{note}
+\begin{note} This includes a drive-by simplification of a return type from
+\tcode{decltype(auto)} to \tcode{auto\&} to clarify that \tcode{update_inner}
+always returns an lvalue.\end{note}:
+\begin{quote}
+\begin{codeblock}
+auto update_inner = [this](iter_reference_t<iterator_t<Base>> x) -> @\changed{decltype(auto)}{auto\&}@ {
+  if constexpr (ref_is_glvalue) // \tcode{x} is a reference
+    return (x);                 // \tcode{(x)} is an lvalue
+  else
+    return (parent_->inner_ = view::all(@\added{std::move(}@x@\added{)}@));
+};
+
+for (; outer_ != ranges::end(parent_->base_); ++outer_) {
+  auto& inner = update_inner(*outer_);
+  [...]
+\end{codeblock}
+\end{quote}
+
+%% TODO: implement `move_only_view` in range-v3 and cmcstl2 for validation.
