@@ -1,3 +1,24 @@
+\begingroup
+\def\hd{\begin{tabular}{lll}
+          \textbf{Document Number:} & {\larger\docno}                 \\
+          \textbf{Date:}            & \reldate                        \\
+          \textbf{Audience:}        & Library Evolution Working Group \\
+          \textbf{Author:}          & Casey Carter                    \\
+          \textbf{Reply to:}        & casey@carter.net
+          \end{tabular}
+}
+\newlength{\hdwidth}
+\settowidth{\hdwidth}{\hd}
+\hfill\begin{minipage}{\hdwidth}\hd\end{minipage}
+\endgroup
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{\Huge \doctitle}
+\end{center}
+
+\vspace{0.5cm}
+
 \chapter{Scope}
 
 The \libconcept{View} concept requires that its models are \libconcept{Copyable},
@@ -12,14 +33,15 @@ be more usable with the ranges library.
 
 \begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
 \begin{codeblock}
-auto r0 = view::iota(0, 42)
+return view::iota(0, 42)
   | view::filter(is_even)
-  | view::transform([](int i) {
-      return int_range_generator(i);
-    });
-auto r1 = r0 | view::join;
+  | view::transform([](int i) -> auto& {
+      static auto r = int_range_generator(i);
+      return r; // YOLO
+    })
+  | view::join;
 \end{codeblock} & \begin{codeblock}
-auto r = view::iota(0, 42)
+return view::iota(0, 42)
   | view::filter(is_even)
   | view::transform([](int i) {
       return int_range_generator(i);
@@ -51,9 +73,8 @@ return fib_view{} | view::take(20);
 \end{codeblock} & \begin{codeblock}
 generator<int> fib() {
   int a = 0, b = 1;
-  while (true) {
+  while (true)
     co_yield std::exchange(a, std::exchange(b, a + b));
-  }
 }
 // ...
 return fib() | view::take(20);
@@ -148,11 +169,12 @@ Generators are the intersection of coroutines and ranges. A generator is, simply
 enough, a coroutine that models the \libconcept{Range} concept. A user writes a
 function whose return type is a generator type that \tcode{co_yield}s
 successive elements of the range
-(\href{https://wandbox.org/permlink/kxHIkGckrCWXnMxr}{LIVE}):
+(\href{https://wandbox.org/permlink/OjvfCc8L3pYMNdU9}{LIVE}):
 \begin{codeblock}
 generator<int> fib() {
-  for (int a = 0, b = 1;; a = std::exchange(b, a + b))
-    co_yield a;
+  int a = 0, b = 1;
+  while (true)
+    co_yield std::exchange(a, std::exchange(b, a + b));
 }
 \end{codeblock}
 which is substantially more concise than the equivalent direct implementation of
