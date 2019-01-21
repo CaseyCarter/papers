@@ -19,7 +19,7 @@
 
 \vspace{0.5cm}
 
-\chapter{Scope}
+\chapter{Abstract}
 
 Usage of \tcode{using namespace std;} means we break existing code in every new
 \Cpp{} standard. Our mechanisms for name collision avoidance reduce but do not
@@ -120,30 +120,30 @@ defined in \Cpp{} version $X$.
 
 To be precise, in each standard library header:
 \begin{itemize}
-\item Within each namespace \tcode{std::cpp$X$}, there will be a shadow
-  namespace \tcode{$A$::$\cdots$::$B$} for each namespace
-  \tcode{std::$A$::$\cdots$::$B$} that was defined in that header in \Cpp$X$.
+\item For each namespace \tcode{std::$\cdots$::$N$} defined in that header
+  in \Cpp$X$, there shall be a corresponding shadow namespace
+  \tcode{std::cpp$X$::$\cdots$::$N$}.
 
-\item For each namespace alias \tcode{std::$A$::$\cdots$::$B$} defined in that
+\item For each namespace alias \tcode{std::$\cdots$::$A$} defined in that
   header in \Cpp$X$ that denotes a namespace
-  \tcode{std::$C$::\brk{}$\cdots$::$D$}, there shall be
+  \tcode{std::$\cdots$::$N$}, there shall be
   a corresponding shadow namespace alias
-  \tcode{std::cpp$X$::$A$::$\cdots$::$B$} that denotes namespace
-  \tcode{std::cpp$X$::$C$::$\cdots$::$D$}.
+  \tcode{std::cpp$X$::$\cdots$::$A$} that denotes namespace
+  \tcode{std::cpp$X$::$\cdots$::$N$}.
 
-\item Each other name $N$ in namespace \tcode{std::$A$::$\cdots$::$B$}
+\item Each other name $E$ in namespace \tcode{std::$\cdots$::$N$}
   defined in that header in \Cpp$X$ shall have a corresponding
-  \grammarterm{using-declaration} in \tcode{std::cpp$X$::$A$::$\cdots$::$B$}:
+  \grammarterm{using-declaration} in \tcode{std::cpp$X$::$\cdots$::$N$}:
   \begin{codeblock}
-  using ::std::@$A$@::@$\cdots$@::@$B$@::@$N$@;
+  using ::std::@$\cdots$@::@$N$@::@$E$@;
   \end{codeblock}
 
 \item Each enumerator $E$ of unscoped enumeration type $T$ defined in namespace
-  \tcode{std::$A$::$\cdots$::$B$} in that header in \Cpp$X$ shall have
+  \tcode{std::$\cdots$::$N$} in that header in \Cpp$X$ shall have
   a corresponding \grammarterm{using-declaration}
-  in \tcode{std::cpp$X$::$A$::$\cdots$::$B$}:
+  in \tcode{std::cpp$X$::$\cdots$::$N$}:
   \begin{codeblock}
-  using ::std::@$A$@::@$\cdots$@::@$B$@::@$E$@;
+  using ::std::@$\cdots$@::@$N$@::@$E$@;
   \end{codeblock}
 \end{itemize}
 The end result is that \tcode{std::cpp$X$} in each header mirrors
@@ -164,13 +164,51 @@ the standard library - and the replacement is easily toolable - a \tcode{sed}
 script could update an entire source tree in no time with almost no chance for
 error.
 
+The simultaneous presence of multiple shadow namespaces has the additional
+benefit of allowing for gradual transition of a codebase from an old standard
+library to a new one. If you replace \tcode{using namespace std;} with
+\tcode{using namespace std::cpp17;}, your program is substantially more likely
+to compile after throwing the \Cpp20 compiler switch. You are then free to
+add references to / \grammarterm{using-declarations} for fully-qualified names
+in \tcode{std} to get at new features without touching the rest of the TU,
+change 17 to 20 TU-by-TU, or even stay at \tcode{cpp17} indefinitely while
+continuing to upgrade compilers and core language versions in the expectation
+that your standard library implementation will continue to support
+\tcode{std::cpp17}.
+
+\section{What about Argument Dependent Lookup?}
+Argument Dependent Lookup\cxxiref{basic.lookup.argdep} pokes some holes in the
+proposal. For example, this \Cpp20 program:
+\begin{codeblock}
+#include <vector>
+using namespace std::cpp20;
+int frobnozzle(vector<int>&) { /**/ }
+int main() {
+  vector<int> vec;
+  frobnozzle(vec);
+}
+\end{codeblock}
+would be broken if we add a function with the signature
+\tcode{std::frobnozzle(vector<int>\&)} in \Cpp23. Since
+\tcode{std::cpp20::vector} and \tcode{std::vector} are the same template, ADL
+for the unqualified call to \tcode{frobnozzle} in \tcode{main} will find the
+new signature in \tcode{std} - shadow namespaces or not - resulting in overload
+resolution ambiguity. This proposal greatly reduces the surface for name
+collisions, but doesn't eliminate them completely when ADL is a factor.
+
+There is ongoing work in both EWG and LWG to address issues with ADL which will
+likely help with this problem if not solve it outright.
+
 \section{Messaging}
 Together with making this change, we as a community need to change our messaging
-on \tcode{using namespace std;}. The Standard should provide normative
+on \grammarterm{using-directive}s. The Standard should provide normative
 encouragement for implementations to
 \href{https://i.imgflip.com/2n1mwr.jpg}{diagnose \tcode{using namespace std;}
 as a dangerous practice and suggest \tcode{using namespace std::cpp$X$}
-instead.}
+instead.} WG21 should change its guidance from ``never write \tcode{using
+namespace std}'' and/or ``write \tcode{using namespace std;} in CPP files'' to
+``write \tcode{using namespace std::cpp$X$} in CPP files if you like, and never
+ever write \tcode{using namespace std;} or we will gleefully break your program.''
 
 \section{Brains...}
 We should simultaneously zombify all names matching the regular expression
@@ -216,29 +254,6 @@ which has two benefits:
 \end{itemize}
 although it seems a shame to paint ourselves into a corner and kill the dream
 of \tcode{std2} die completely.
-
-\section{What about Argument Dependent Lookup?}
-Argument Dependent Lookup\cxxiref{basic.lookup.argdep} pokes some holes in the
-proposal. For example, this \Cpp20 program:
-\begin{codeblock}
-#include <vector>
-using namespace std::cpp20;
-int frobnozzle(vector<int>&) { /**/ }
-int main() {
-  vector<int> vec;
-  frobnozzle(vec);
-}
-\end{codeblock}
-would be broken if we add a function with the signature
-\tcode{std::frobnozzle(vector<int>\&)} in \Cpp23. Since
-\tcode{std::cpp20::vector} and \tcode{std::vector} are the same template, ADL
-for the unqualified call to \tcode{frobnozzle} in \tcode{main} will find the
-new signature in \tcode{std} - shadow namespaces or not - resulting in overload
-resolution ambiguity. This proposal greatly reduces the surface for name
-collisions, but doesn't eliminate them completely when ADL is a factor.
-
-There is ongoing work in both EWG and LWG to address issues with ADL which will
-likely help with this problem if not solve it outright.
 
 
 \chapter{Technical specifications}
