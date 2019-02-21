@@ -6,6 +6,10 @@ up during LWG review of P0896 ``The One Ranges Proposal''~(\cite{P0896}).
 All wording sections herein are relative to the post-San Diego working draft.
 
 \rSec1[intro.history]{Revision History}
+\rSec2[intro.history.r1]{Revision 2}
+\begin{itemize}
+\item Stuff goes here.
+\end{itemize}
 \rSec2[intro.history.r1]{Revision 1}
 \begin{itemize}
 \item Rebase wording onto post-San Diego working draft.
@@ -758,6 +762,150 @@ specializations of \tcode{subrange} model \libconcept{forwarding-range}.
 \end{addedblock}
 \end{quote}
 
+Change the \tcode{<algorithm>} synopsis in \cxxref{algorithm.syn} as follows:
+
+\begin{quote}
+\begin{codeblock}
+#include <initializer_list>
+
+namespace std {
+  [...]
+  namespace ranges {
+    template<class I, class F>
+    struct for_each_result {
+      @\added{[[no_unique_address]]}@ I in;
+      @\added{[[no_unique_address]]}@ F fun;
+
+      @\added{template<class I2, class F2>}@
+        @\added{requires ConvertibleTo<const I\&, I2> \&\& ConvertibleTo<const F\&, F2>}@
+        @\added{operator for_each_result<I2, F2>() const \& \{}@
+          @\added{return \{in, fun\};}@
+        @\added{\}}@
+
+      @\added{template<class I2, class F2>}@
+        @\added{requires ConvertibleTo<I, I2> \&\& ConvertibleTo<F, F2>}@
+        @\added{operator for_each_result<I2, F2>() \&\& \{}@
+          @\added{return \{std::move(in), std::move(fun)\};}@
+        @\added{\}}@
+    };
+    [...]
+  }
+  [...]
+  namespace ranges {
+    template<class I1, class I2>
+    struct mismatch_result {
+      @\added{[[no_unique_address]]}@ I1 in1;
+      @\added{[[no_unique_address]]}@ I2 in2;
+
+      @\added{template<class II1, class II2>}@
+        @\added{requires ConvertibleTo<const I1\&, II1> \&\& ConvertibleTo<const I2\&, II2>}@
+        @\added{operator mismatch_result<II1, II2>() const \& \{}@
+          @\added{return \{in1, in2\};}@
+        @\added{\}}@
+
+      @\added{template<class II1, class II2>}@
+        @\added{requires ConvertibleTo<I1, II1> \&\& ConvertibleTo<I2, II2>}@
+        @\added{operator mismatch_result<II1, II2>() \&\& \{}@
+          @\added{return \{std::move(in1), std::move(in2)\};}@
+        @\added{\}}@
+    };
+    [...]
+  }
+  [...]
+  namespace ranges {
+    template<class I, class O>
+    struct copy_result {
+      @\added{[[no_unique_address]]}@ I in;
+      @\added{[[no_unique_address]]}@ O out;
+
+      @\added{template<class I2, class O2>}@
+        @\added{requires ConvertibleTo<const I\&, I2> \&\& ConvertibleTo<const O\&, O2>}@
+        @\added{operator copy_result<I2, O2>() const \& \{}@
+          @\added{return \{in, out\};}@
+        @\added{\}}@
+
+      @\added{template<class I2, class O2>}@
+        @\added{requires ConvertibleTo<I, I2> \&\& ConvertibleTo<O, O2>}@
+        @\added{operator copy_result<I2, O2>() \&\& \{}@
+          @\added{return \{std::move(in), std::move(out)\};}@
+        @\added{\}}@
+    };
+    [...]
+  }
+  [...]
+  namespace ranges {
+    [...]
+    template<class I1, class I2, class O>
+    struct binary_transform_result {
+      @\added{[[no_unique_address]]}@ I1 in1;
+      @\added{[[no_unique_address]]}@ I2 in2;
+      @\added{[[no_unique_address]]}@ O out;
+
+      @\added{template<class II1, class II2, class OO>}@
+        @\added{requires ConvertibleTo<const I1\&, II1> \&\&}@
+          @\added{ConvertibleTo<const I2\&, II2> \&\& ConvertibleTo<const O\&, OO>}@
+        @\added{operator binary_transform_result<II1, II2, OO>() const \& \{}@
+          @\added{return \{in1, in2, out\};}@
+        @\added{\}}@
+
+      @\added{template<class II1, class II2, class OO>}@
+        @\added{requires ConvertibleTo<I1, II1> \&\&}@
+          @\added{ConvertibleTo<I2, II2> \&\& ConvertibleTo<O, OO>}@
+        @\added{operator binary_transform_result<II1, II2, OO>() \&\& \{}@
+          @\added{return \{std::move(in1), std::move(in2), std::move(out)\};}@
+        @\added{\}}@
+    };
+    [...]
+  }
+  [...]
+  namespace ranges {
+    template<class I, class O1, class O2>
+    struct partition_copy_result {
+      @\added{[[no_unique_address]]}@ I in;
+      @\added{[[no_unique_address]]}@ O1 out1;
+      @\added{[[no_unique_address]]}@ O2 out2;
+
+      @\added{template<class II, class OO1, class OO2>}@
+        @\added{requires ConvertibleTo<const I\&, II> \&\&}@
+          @\added{ConvertibleTo<const O1\&, OO1> \&\& ConvertibleTo<const O2\&, OO2>}@
+        @\added{operator partition_copy_result<II, OO1, OO2>() const \& \{}@
+          @\added{return \{in, out1, out2\};}@
+        @\added{\}}@
+
+      @\added{template<class II, class OO1, class OO2>}@
+        @\added{requires ConvertibleTo<I, II> \&\&}@
+          @\added{ConvertibleTo<O1, OO1> \&\& ConvertibleTo<O2, OO2>}@
+        @\added{operator partition_copy_result<II, OO1, OO2>() \&\& \{}@
+          @\added{return \{std::move(in), std::move(out1), std::move(out2)\};}@
+        @\added{\}}@
+    };
+    [...]
+  }
+  [...]
+  namespace ranges {
+    template<class T>
+    struct minmax_result {
+      @\added{[[no_unique_address]]}@ T min;
+      @\added{[[no_unique_address]]}@ T max;
+
+      @\added{template<class T2>}@
+        @\added{requires ConvertibleTo<const T\&, T2>}@
+        @\added{operator minmax_result<T2>() const \& \{}@
+          @\added{return \{min, max\};}@
+        @\added{\}}@
+
+      @\added{template<class T2>}@
+        @\added{requires ConvertibleTo<T, T2>}@
+        @\added{operator minmax_result<T2>() \&\& \{}@
+          @\added{return \{std::move(min), std::move(max)\};}@
+        @\added{\}}@
+    };
+    [...]
+  }
+  [...]
+}
+\end{codeblock}
+\end{quote}
 
 %% \setcounter{chapter}{7}
 %% \rSec0[sub.headers]{Headers \tcode{iterator_}- and \tcode{range_concepts}}
