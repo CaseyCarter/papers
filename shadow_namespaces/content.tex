@@ -65,6 +65,9 @@ auto first = ranges::begin(vec);
 \begin{itemize}
 \item Indicate that the shadow of an inline namespace is also an inline
   namespace.
+\item Clarify that only entities that both are defined in \tcode{std} and were
+  defined in \tcode{std} in an older language version are shadowed.
+\item Add detailed example.
 \end{itemize}
 \subsection{Revision 0}
 \begin{itemize}
@@ -126,26 +129,26 @@ defined in \Cpp{} version $X$.
 To be precise, in each standard library header:
 \begin{itemize}
 \item For each namespace \tcode{std::$\cdots$::$N$} defined in that header
-  in \Cpp$X$, there shall be a corresponding shadow namespace
-  \tcode{std::cpp$X$::$\cdots$::$N$}; the shadow namespace shall be an inline
-  namespace if and only if the namespace being shadowed is an inline namespace.
+  \added{that was also defined} in \Cpp$X$, there shall be a corresponding shadow namespace
+  \tcode{std::cpp$X$::$\cdots$::$N$}\added{; the shadow namespace shall be an inline
+  namespace if and only if the namespace being shadowed is an inline namespace}.
 
 \item For each namespace alias \tcode{std::$\cdots$::$A$} defined in that
-  header in \Cpp$X$ that denotes a namespace
+  header \added{that was also defined} in \Cpp$X$ that denotes a namespace
   \tcode{std::$\cdots$::$N$}, there shall be
   a corresponding shadow namespace alias
   \tcode{std::cpp$X$::$\cdots$::$A$} that denotes namespace
   \tcode{std::cpp$X$::$\cdots$::$N$}.
 
 \item Each other name $E$ in namespace \tcode{std::$\cdots$::$N$}
-  defined in that header in \Cpp$X$ shall have a corresponding
+  defined in that header \added{that was also defined} in \Cpp$X$ shall have a corresponding
   \grammarterm{using-declaration} in \tcode{std::cpp$X$::$\cdots$::$N$}:
   \begin{codeblock}
   using ::std::@$\cdots$@::@$N$@::@$E$@;
   \end{codeblock}
 
 \item Each enumerator $E$ of unscoped enumeration type $T$ defined in namespace
-  \tcode{std::$\cdots$::$N$} in that header in \Cpp$X$ shall have
+  \tcode{std::$\cdots$::$N$} in that header \added{that was also defined} in \Cpp$X$ shall have
   a corresponding \grammarterm{using-declaration}
   in \tcode{std::cpp$X$::$\cdots$::$N$}:
   \begin{codeblock}
@@ -153,12 +156,81 @@ To be precise, in each standard library header:
   \end{codeblock}
 \end{itemize}
 The end result is that \tcode{std::cpp$X$} in each header mirrors
-the structure and content that existed in that header in \tcode{std} in \Cpp$X$.
+the structure and content that existed in that header in \tcode{std} in \Cpp$X$
+\added{, modulo entities that have been removed from the library since \Cpp$X$}.
 The meaning of those names may change in future revisions of \Cpp, but the set
 of visible names will not.
 
+\newpage
+\section{Example}
+
+Were the header \tcode{<foo>} defined in the working draft:
+
+\begin{codeblock}
+namespace std {
+  template</**/> struct new_fancy_vector; // Added in C++20.
+
+  enum some_enum { X, Y }; // Added in C++20
+
+  namespace chrono {
+    using nanoseconds = /**/;
+
+    inline namespace chrono_literals {
+      constexpr chrono::nanoseconds operator""ns(unsigned long long);
+    }
+  }
+
+  // We would shadow all of its contents in cpp20 as:
+  namespace cpp20 {
+    using std::new_fancy_vector, std::some_enum, std::X, std::Y;
+
+    namespace chrono {
+      using std::chrono::nanoseconds;
+
+      inline namespace chrono_literals {
+        using std::chrono::chrono_literals::operator""ns;
+      }
+    }
+  }
+
+  // And a subset of the contents in cpp17 as:
+  namespace cpp17 {
+    namespace chrono {
+      using std::chrono::nanoseconds;
+
+      inline namespace chrono_literals {
+        using std::chrono::chrono_literals::operator""ns;
+      }
+    }
+  }
+}
+\end{codeblock}
+
+This well-formed C++17 program:
+\begin{codeblock}
+#include <foo>
+#include <vector>
+
+using namespace std;
+
+struct fancy_new_vector { /**/ };
+int main() {
+  fancy_new_vector v = std::vector<int>{1,2,3};
+}
+\end{codeblock}
+
+would break when compiled with a C++20 implementation. Replacing
+\tcode{using namespace std;} with \tcode{using namespace std::cpp17;} will allow
+the program to continue to compile. Had we had shadow namespaces in C++17,
+the programmer could have written \tcode{using namespace std::cpp17;} originally,
+and would have had no issues switching to a C++20 implementation, allowing them
+to deal with such name collisions at leisure upon updating this TU from
+\tcode{cpp17} to \tcode{cpp20}.
+
+\section{Discussion}
+
 How can this prevent name collisions for programs that
-\tcode{using namespace std;}? Simple - it can't. It \emph{can} prevent name
+\tcode{using namespace std;}? Simple - it can't. It can, however, prevent name
 collisions from names newly added in \Cpp20 for programs that
 \tcode{using namespace std::cpp17;}, however, and prevent name collisions
 from names newly added in \Cpp23 for programs that
