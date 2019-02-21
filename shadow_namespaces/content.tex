@@ -61,6 +61,11 @@ auto first = ranges::begin(vec);
 \end{libtab2}
 
 \section{Revision History}
+\subsection{Revision 1}
+\begin{itemize}
+\item Indicate that the shadow of an inline namespace is also an inline
+  namespace.
+\end{itemize}
 \subsection{Revision 0}
 \begin{itemize}
 \item Sprang fully formed from the forehead of Zeus.
@@ -122,7 +127,8 @@ To be precise, in each standard library header:
 \begin{itemize}
 \item For each namespace \tcode{std::$\cdots$::$N$} defined in that header
   in \Cpp$X$, there shall be a corresponding shadow namespace
-  \tcode{std::cpp$X$::$\cdots$::$N$}.
+  \tcode{std::cpp$X$::$\cdots$::$N$}; the shadow namespace shall be an inline
+  namespace if and only if the namespace being shadowed is an inline namespace.
 
 \item For each namespace alias \tcode{std::$\cdots$::$A$} defined in that
   header in \Cpp$X$ that denotes a namespace
