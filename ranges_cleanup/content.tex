@@ -11,6 +11,7 @@ All wording sections herein are relative to the post-San Diego working draft.
 \item Add conversion operators to the algorithm result types as needed for the
   implicit conversion from e.g. \tcode{copy_result<I, O>} to
   \tcode{copy_result<dangling, O>} to be well-formed.
+\item Editorial tweaks requested by LWG.
 \end{itemize}
 \rSec2[intro.history.r1]{Revision 1}
 \begin{itemize}
@@ -596,10 +597,10 @@ since the size of the unwrapped base range is the same.
 
 \rSec1[sdrow.weiv_esrever]{Technical specifications}
 
-\begin{itemize}
-\item Modify the specification of \tcode{view::reverse} in
-  \cxxref{range.reverse.adaptor} as follows:
-  \begin{quote}
+Modify the specification of \tcode{view::reverse} in
+\cxxref{range.reverse.adaptor} as follows:
+
+\begin{quote}
 \pnum
 The name \tcode{view::reverse} denotes a
 range adaptor object\cxxiref{range.adaptor.object}.
@@ -609,26 +610,28 @@ For some subexpression \tcode{E}, the expression
 \begin{addedblock}
 \begin{itemize}
 \item If the type of \tcode{E} is a (possibly cv-qualified)
-  specialization of \tcode{reverse_view}, \tcode{E.base()}.
+  specialization of \tcode{reverse_view}, equivalent to \tcode{E.base()}.
 \item Otherwise, if the type of \tcode{E} is cv-qualified
-  \begin{codeblock}
-  subrange<reverse_iterator<I>, reverse_iterator<I>, K>
-  \end{codeblock}
+\begin{codeblock}
+subrange<reverse_iterator<I>, reverse_iterator<I>, K>
+\end{codeblock}
   for some iterator type \tcode{I} and
   value \tcode{K} of type \tcode{subrange_kind},
-  \begin{codeblock}
-  subrange<I, I, K>(E.end().base(), E.begin().base(), E.size())
-  \end{codeblock}
-  if \tcode{K} is \tcode{subrange_kind::sized} and
-  \begin{codeblock}
-  subrange<I, I, K>(E.end().base(), E.begin().base())
-  \end{codeblock}
-  otherwise, except that in either case \tcode{E} is evaluated only once.
-\item Otherwise, \tcode{reverse_view\{E\}}.
+    \begin{itemize}
+    \item if \tcode{K} is \tcode{subrange_kind::sized}, equivalent to:
+\begin{codeblock}
+subrange<I, I, K>(E.end().base(), E.begin().base(), E.size())
+\end{codeblock}
+    \item otherwise, equivalent to:
+\begin{codeblock}
+subrange<I, I, K>(E.end().base(), E.begin().base())
+\end{codeblock}
+    \end{itemize}
+  However, in either case \tcode{E} is evaluated only once.
+\item Otherwise, equivalent to \tcode{reverse_view\{E\}}.
 \end{itemize}
 \end{addedblock}
-  \end{quote}
-\end{itemize}
+\end{quote}
 
 
 \rSec0[dangle]{Use cases left \tcode{dangling}}
