@@ -615,7 +615,7 @@ For some subexpression \tcode{E}, the expression
   subrange<reverse_iterator<I>, reverse_iterator<I>, K>
   \end{codeblock}
   for some iterator type \tcode{I} and
-  value \tcode{K} of \tcode{subrange_kind},
+  value \tcode{K} of type \tcode{subrange_kind},
   \begin{codeblock}
   subrange<I, I, K>(E.end().base(), E.begin().base(), E.size())
   \end{codeblock}
@@ -729,7 +729,7 @@ The tag type \tcode{dangling} is used together with the template aliases
 \tcode{safe_iterator_t} and \tcode{safe_subrange_t} to indicate that
 an algorithm that typically returns an iterator into or
 subrange of a \libconcept{Range} argument does not return
-an iterator or subrange which could potentially dangle
+an iterator or subrange which could potentially reference a range whose lifetime has ended
 for a particular rvalue \libconcept{Range} argument which
 does not model \libconcept{\placeholder{forwarding-range}}\cxxiref{range.range}.
 
