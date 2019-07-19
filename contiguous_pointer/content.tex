@@ -1,9 +1,9 @@
 \begingroup
 \def\hd{\begin{tabular}{lll}
-          \textbf{Document Number:} & {\larger\docno}                 \\
-          \textbf{Date:}            & \reldate                        \\
-          \textbf{Audience:}        & Library Evolution Working Group \\
-          \textbf{Author:}          & Casey Carter                    \\
+          \textbf{Document Number:} & {\larger\docno}       \\
+          \textbf{Date:}            & \reldate              \\
+          \textbf{Audience:}        & Library Working Group \\
+          \textbf{Author:}          & Casey Carter          \\
           \textbf{Reply to:}        & casey@carter.net
           \end{tabular}
 }
@@ -29,28 +29,56 @@ that mechanism.
 \begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
 \begin{codeblock}
 extern "C" int some_c_api(T* ptr, size_t size);
-int try_useful_things(ContiguousIterator auto i, size_t n) {
+extern "C" int other_c_api(T* first, T* last);
+
+template<ContiguousIterator I>
+int try_useful_things(I i, size_t n) {
   // Expects: [i, n) is a valid range
-  if (n == 0) {
-    // Oops - can't dereference past-the-end iterator
-    throw something;
+  @\removed{if (n == 0) \{}@
+    @\removed{// Oops - can't dereference}@
+    @\removed{// past-the-end iterator}@
+    @\removed{throw something;}@
+  @\removed{\}}@
+  return some_c_api(@\removed{addressof(*i)}@, n);
+}
+
+template<ContiguousIterator I>
+int try_useful_things(I i, I j) {
+  // Expects: [i, j) is a valid range
+  @\removed{if (i == j) \{}@
+    @\removed{// Oops - can't dereference}@
+    @\removed{// past-the-end iterator}@
+    @\removed{throw something;}@
   }
-  return some_c_api(addressof(*i), n);
+  return other_c_api(@\removed{addressof(*i)}@,
+                     @\removed{addressof(*i)}@ + (j - i));
 }
 \end{codeblock} & \begin{codeblock}
 extern "C" int some_c_api(T* ptr, size_t size);
-int try_useful_things(ContiguousIterator auto i, size_t n) {
-  // Expects: [i, n) is a valid range
-  return some_c_api(to_address(i), n);
-}
-\end{codeblock} \\ \rowsep
+extern "C" int other_c_api(T* first, T* last);
 
-\begin{codeblock} %% FIXME
-\end{codeblock} & \begin{codeblock}
+template<ContiguousIterator I>
+int try_useful_things(I i, size_t n) {
+  // Expects: [i, n) is a valid range
+  return some_c_api(@\added{to_address(i)}@, n);
+}
+
+template<ContiguousIterator I>
+int try_useful_things(I i, I j) {
+  // Expects: [i, j) is a valid range
+  return other_c_api(@\added{to_address(i)}@,
+                     @\added{to_address(j)}@);
+}
 \end{codeblock} \\
 \end{libtab2}
 
 \section{Revision History}
+\subsection{Revision 1}
+\begin{itemize}
+\item Update Tony Table: C APIs can't be overloaded, and add a bit of markup to
+  make the differences clear.
+\end{itemize}
+
 \subsection{Revision 0}
 \begin{itemize}
 \item Initial revision.
@@ -83,15 +111,16 @@ so it can be used uniformly.
 P0653R2 ``Utility to convert a pointer to a raw pointer''~\cite{P0653R2} added
 the function \tcode{std::to_address}\cxxiref{pointer.conversion} to the Standard
 Library which converts values of so-called ``fancy'' pointer types and standard
-smart pointer types to pointer values. In the
-interest of spelling similar things similarly, it seems a good idea to reuse
-this facility to convert \tcode{ContiguousIterator}s to pointer values.
-In practice, that means that a type \tcode{I} must be a pointer type or
+smart pointer types to pointer values. In the interest of spelling similar
+things  similarly, it seems a good idea to reuse this facility to convert
+\tcode{ContiguousIterator}s to pointer values. In practice, that means that a
+type \tcode{I} must be a pointer type or
 \begin{itemize}
 \item specialize \tcode{pointer_traits<I>} with a member \tcode{element_type}
   or have a nested member \tcode{element_type}
   so instantiation of \tcode{pointer_traits<I>} succeeds, and
 \item Either implement \tcode{pointer_traits<I>::to_address} or
+\end{itemize}
 
 \chapter{Proposal}
 
