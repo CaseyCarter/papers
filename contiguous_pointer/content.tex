@@ -82,6 +82,8 @@ int try_useful_things(I i, I j) {
 \item Remove bad \tcode{;} after expression in a
   \grammarterm{compound-requirement} in the definition of
   \libconcept{ContiguousIterator}.
+\item Remove \tcode{operator->} requirement (which was not a core part of the
+  proposal) due to LWG concerns.
 \end{itemize}
 
 \subsection{Revision 0}
@@ -171,10 +173,7 @@ template<class I>
     Same<iter_value_t<I>, remove_cvref_t<iter_reference_t<I>>>@\changed{;}{ \&\&}@
     @\added{requires(const I\& i) \{}@
       @\added{\{ to_address(i) \} -> Same<add_pointer_t<iter_reference_t<I>>>;}@
-    @\added{\} \&\&}@
-    @\added{(is_pointer_v<I> || requires(const I\& i) \{}@
-      @\added{\{ i.operator->() \} -> Same<add_pointer_t<iter_reference_t<I>>>;}@
-    @\added{\});}@
+    @\added{\};}@
 \end{codeblock}
 
 \setcounter{Paras}{1}
@@ -192,9 +191,9 @@ is equal to
 \end{removedblock}
 \begin{addedblock}
 \begin{itemize}
-\item \tcode{to_address(b) == to_address(a) + D(b - a)},
-\item \tcode{to_address(c) == to_address(a) + D(c - a)}, and
-\item if \tcode{I} is not a pointer type, \tcode{a.operator->() == to_address(a)}.
+\item \tcode{to_address(a) == addressof(*a),}
+\item \tcode{to_address(b) == to_address(a) + D(b - a)}, and
+\item \tcode{to_address(c) == to_address(a) + D(c - a)}.
 \end{itemize}
 \end{addedblock}
 \end{quote}
