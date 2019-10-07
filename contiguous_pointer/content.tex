@@ -1,9 +1,9 @@
 \begingroup
 \def\hd{\begin{tabular}{lll}
-          \textbf{Document Number:} & {\larger\docno}                 \\
-          \textbf{Date:}            & \reldate                        \\
-          \textbf{Audience:}        & Library Evolution Working Group \\
-          \textbf{Author:}          & Casey Carter                    \\
+          \textbf{Document Number:} & {\larger\docno}       \\
+          \textbf{Date:}            & \reldate              \\
+          \textbf{Audience:}        & Library Working Group \\
+          \textbf{Author:}          & Casey Carter          \\
           \textbf{Reply to:}        & casey@carter.net
           \end{tabular}
 }
@@ -29,14 +29,29 @@ that mechanism.
 \begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
 \begin{codeblock}
 extern "C" int some_c_api(T* ptr, size_t size);
+extern "C" int other_c_api(T* first, T* last);
+
 template<ContiguousIterator I>
 int try_useful_things(I i, size_t n) {
-  // Expects: \range{i}{n} is a valid range
-  if (n == 0) {
-    // Oops - can't dereference past-the-end iterator
-    throw something;
+  // Expects: [i, n) is a valid range
+  @\removed{if (n == 0) \{}@
+    @\removed{// Oops - can't dereference}@
+    @\removed{// past-the-end iterator}@
+    @\removed{throw something;}@
+  @\removed{\}}@
+  return some_c_api(@\removed{addressof(*i)}@, n);
+}
+
+template<ContiguousIterator I>
+int try_useful_things(I i, I j) {
+  // Expects: [i, j) is a valid range
+  @\removed{if (i == j) \{}@
+    @\removed{// Oops - can't dereference}@
+    @\removed{// past-the-end iterator}@
+    @\removed{throw something;}@
   }
-  return some_c_api(addressof(*i), n);
+  return other_c_api(@\removed{addressof(*i)}@,
+                     @\removed{addressof(*i)}@ + (j - i));
 }
 
 template<ContiguousIterator I>
@@ -51,21 +66,37 @@ int try_useful_things(I i, I j) {
 }
 \end{codeblock} & \begin{codeblock}
 extern "C" int some_c_api(T* ptr, size_t size);
+extern "C" int other_c_api(T* first, T* last);
+
 template<ContiguousIterator I>
 int try_useful_things(I i, size_t n) {
-  // Expects: \range{i}{n} is a valid range
-  return some_c_api(to_address(i), n);
+  // Expects: [i, n) is a valid range
+  return some_c_api(@\added{to_address(i)}@, n);
 }
 
 template<ContiguousIterator I>
 int try_useful_things(I i, I j) {
-  // Expects: \range{i}{j} is a valid range
-  return some_c_api(to_address(i), to_address(j));
+  // Expects: [i, j) is a valid range
+  return other_c_api(@\added{to_address(i)}@,
+                     @\added{to_address(j)}@);
 }
 \end{codeblock} \\
 \end{libtab2}
 
 \section{Revision History}
+\subsection{Revision 1}
+\begin{itemize}
+\item Update Tony Table: C APIs can't be overloaded, and add a bit of markup to
+  make the differences stand out.
+\item Correct bad pointer arithmetic in the description of the address of a
+  past-the-end iterator whose predecessor is dereferenceable.
+\item Remove bad \tcode{;} after expression in a
+  \grammarterm{compound-requirement} in the definition of
+  \libconcept{ContiguousIterator}.
+\item Remove \tcode{operator->} requirement (which was not a core part of the
+  proposal) due to LWG concerns.
+\end{itemize}
+
 \subsection{Revision 0}
 \begin{itemize}
 \item Initial revision.
@@ -98,16 +129,18 @@ so it can be used uniformly.
 P0653R2 ``Utility to convert a pointer to a raw pointer''~\cite{P0653R2} added
 the function \tcode{std::to_address}\cxxiref{pointer.conversion} to the Standard
 Library which converts values of so-called ``fancy'' pointer types and standard
-smart pointer types to pointer values. In the
-interest of spelling similar things similarly, it seems a good idea to reuse
-this facility to convert \tcode{ContiguousIterator}s to pointer values.
-In practice, that means that a type \tcode{I} must be a pointer type or
+smart pointer types to pointer values. In the interest of spelling similar
+things  similarly, it seems a good idea to reuse this facility to convert
+\tcode{ContiguousIterator}s to pointer values. In practice, that means that a
+type \tcode{I} must be a pointer type or
 \begin{itemize}
-\item specialize \tcode{pointer_traits<I>}, and
-\item implement \tcode{pointer_traits<I>::to_address}, or admit past-the-end
-  (potentially non-dereferenceable) iterator values in \tcode{operator->()}.
+\item specialize \tcode{pointer_traits<I>} with a member \tcode{element_type}
+  or have a nested member \tcode{element_type}
+  so instantiation of \tcode{pointer_traits<I>} succeeds, and
+\item Either implement \tcode{pointer_traits<I>::to_address} or admit
+  past-the-end (potentially non-dereferenceable) iterator values in
+  \tcode{operator->()}.
 \end{itemize}
-
 
 \chapter{Proposal}
 
@@ -119,18 +152,18 @@ The basic proposal is to add a requirement to the
   \tcode{add_pointer_t<iter_reference_t<i>>},
 \item be well-defined for both dereferenceable and past-the-end pointer values,
 \item yield a pointer value equal to \tcode{std::addressof(*i)} if \tcode{i} is
-  dereferenceable, or equal to \tcode{std::addressof(*(i - 1))} if \tcode{i - 1}
-  is dereferenceable.
+  dereferenceable, or \tcode{1 + std::addressof(*(i - 1))} if \tcode{i - 1} is
+  dereferenceable.
 \end{itemize}
 
-Since dereferenceable \tcode{ContiguousIterator}s always denote objects -
+Since dereferenceable \libconcept{ContiguousIterators} always denote objects -
 their reference types are always lvalue references - they can always feasibly
 implement the \tcode{->} operator. \tcode{->} is useful in contexts where the
-value type of the iterator is concrete so we propose requiring it for all
-\tcode{ContiguousIterator}s.
+value type of the iterator is concrete, so we propose requiring it for all
+\libconcept{ContiguousIterators}.
 \begin{note}
-Recall that the iterator concepts do not generally require \tcode{operator->}
-as do the ``old'' iterator requirements.
+Recall that the iterator concepts do not generally require \tcode{operator->} as
+do the ``old'' iterator requirements.
 \end{note}
 
 Now that there's a mechanism to retrieve a pointer from a potentially
@@ -139,9 +172,8 @@ non-dereferenceable iterator, we can also cleanup the edge cases in
 \tcode{nullptr} for an empty \tcode{ContiguousRange} rather than unconditionally
 returning the pointer value that the \tcode{begin} iterator denotes.
 
-
 \chapter{Technical specifications}
-Change the \cxxref{iterator.concept.contiguous} as follows:
+Change \cxxref{iterator.concept.contiguous} as follows:
 \begin{quote}
 \begin{codeblock}
 template<class I>
@@ -152,16 +184,15 @@ template<class I>
     Same<iter_value_t<I>, remove_cvref_t<iter_reference_t<I>>>@\changed{;}{ \&\&}@
     @\added{requires(const I\& i) \{}@
       @\added{\{ to_address(i) \} -> Same<add_pointer_t<iter_reference_t<I>>>;}@
-    @\added{\} \&\&}@
-    @\added{(is_pointer_v<I> || requires(const I\& i) \{}@
-      @\added{\{ i.operator->(); \} -> Same<add_pointer_t<iter_reference_t<I>>>;}@
-    @\added{\});}@
+    @\added{\};}@
 \end{codeblock}
 
 \setcounter{Paras}{1}
 \pnum
-Let \tcode{a} and \tcode{b} be dereferenceable iterators \added{and \tcode{c} a non-dereferenceable iterator} of type \tcode{I}
-such that \tcode{b} is reachable from \tcode{a} \added{and \tcode{c} is reachable from \tcode{b}},
+Let \tcode{a} and \tcode{b} be dereferenceable iterators \added{and \tcode{c} a
+non-dereferenceable iterator} of type \tcode{I}
+such that \tcode{b} is reachable from \tcode{a} \added{and \tcode{c} is
+reachable from \tcode{b}},
 and let \tcode{D} be \tcode{iter_difference_t<I>}.
 The type \tcode{I} models \libconcept{ContiguousIterator} only if
 \begin{removedblock}
@@ -171,12 +202,9 @@ is equal to
 \end{removedblock}
 \begin{addedblock}
 \begin{itemize}
-\item
-  \tcode{to_address(b) == to_address(a) + D(b - a)},
-\item
-  \tcode{to_address(c) == to_address(a) + D(c - a)}, and
-\item
-  if \tcode{I} is not a pointer type, \tcode{a.operator->() == to_address(a)}.
+\item \tcode{to_address(a) == addressof(*a),}
+\item \tcode{to_address(b) == to_address(a) + D(b - a)}, and
+\item \tcode{to_address(c) == to_address(a) + D(c - a)}.
 \end{itemize}
 \end{addedblock}
 \end{quote}
@@ -192,7 +220,7 @@ expression-equivalent to:
 
 \begin{itemize}
 \item
-  If \tcode{E} is an lvalue, \tcode{\placeholdernc{DECAY_COPY}(E.data())}
+  If \tcode{E} is an lvalue, \tcode{\placeholdernc{decay-copy}(E.data())}
   if it is a valid expression of pointer to object type.
 
 \item
@@ -208,16 +236,17 @@ expression-equivalent to:
 
 \item
   Otherwise, \tcode{ranges::data(E)} is ill-formed.
+  \begin{note}
+  This case can result in substitution failure when \tcode{ranges::data(E)}
+  appears in the immediate context of a template instantiation.
+  \end{note}
 \end{itemize}
-[...]
 \end{quote}
 
 Change \cxxref{view.interface} as follows:
 \begin{quote}
 \begin{codeblock}
 namespace std::ranges {
-  [...]
-
   template<class D>
     requires is_class_v<D> && Same<D, remove_cv_t<D>>
   class view_interface : public view_base {
@@ -234,5 +263,7 @@ namespace std::ranges {
       }
 
     [...]
+  };
+}
 \end{codeblock}
 \end{quote}
