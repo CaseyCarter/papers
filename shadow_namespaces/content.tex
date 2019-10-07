@@ -121,10 +121,9 @@ doesn't require them to do more work?
 \chapter{Proposal}
 If users won't write using declarations for the standard library names they
 want to use unqualified, why don't we do it for them? This paper proposes adding
-nested namespace \tcode{std::cpp17} and \tcode{std::cpp20}. within these
-nested namespaces \tcode{std::cpp$X$} (where $X$ is either 17 or 20) there
-shall be a shadow of the entire name structure of the standard library as it was
-defined in \Cpp{} version $X$.
+nested namespaces \tcode{std::cpp17} and \tcode{std::cpp20}. Within the
+nested namespace \tcode{std::cpp$X$} there will be a shadow of the entire name
+structure of the standard library as it was defined in \Cpp{} version $X$.
 
 To be precise, in each standard library header:
 \begin{itemize}
@@ -157,7 +156,7 @@ To be precise, in each standard library header:
 \end{itemize}
 The end result is that \tcode{std::cpp$X$} in each header mirrors
 the structure and content that existed in that header in \tcode{std} in \Cpp$X$
-\added{, modulo entities that have been removed from the library since \Cpp$X$}.
+\added{, except for any entities that have been removed from the library since \Cpp$X$}.
 The meaning of those names may change in future revisions of \Cpp, but the set
 of visible names will not.
 
@@ -221,11 +220,11 @@ int main() {
 
 would break when compiled with a C++20 implementation. Replacing
 \tcode{using namespace std;} with \tcode{using namespace std::cpp17;} will allow
-the program to continue to compile. Had we had shadow namespaces in C++17,
+the program to continue to compile. Had we shadow namespaces in C++17,
 the programmer could have written \tcode{using namespace std::cpp17;} originally,
 and would have had no issues switching to a C++20 implementation, allowing them
-to deal with such name collisions at leisure upon updating this TU from
-\tcode{cpp17} to \tcode{cpp20}.
+to deal with such name collisions at leisure upon updating this translation unit
+(TU) from \tcode{cpp17} to \tcode{cpp20}.
 
 \section{Discussion}
 
@@ -294,9 +293,9 @@ We should simultaneously zombify all names matching the regular expression
 macroization. This both prevents defining \tcode{cpp23} in \Cpp20 programs
 which would then fail to compile in \Cpp23, and allows vendors to indefinitely
 maintain support for older versions of the standard in e.g. \tcode{std::cpp11}
-or \tcode{std::cpp98}.\footnote{At least until 2098 when WG21 will need to
-decide whether to drop support for \Cpp98 or define the new shadow namespace
-as \tcode{std::cpp2098}, but hey - that's not my problem!}
+or \tcode{std::cpp98}.\footnote{At least until 2098 when WG21 must decide
+whether to drop support for \Cpp98 or define the new shadow namespace
+as \tcode{std::cpp2098}.}
 
 \section{How many versions?}
 How far back should the required shadow namespaces go? The proposal above
@@ -337,7 +336,7 @@ of \tcode{std2} die completely.
 \chapter{Technical specifications}
 Wording for this proposal will be straightforward - but possibly voluminous -
 once LWG and the Editor decide what form the wording should take. Rather than
-proving page upon page of wording for alternative forms here which would only
+providing page upon page of wording for alternative forms here which would only
 contribute to the word cloud for the pre-meeting mailing, the author awaits
 direction on the desired form.
 
