@@ -1,9 +1,11 @@
 \begingroup
 \def\hd{\begin{tabular}{lll}
-          \textbf{Document Number:} & {\larger\docno}       \\
-          \textbf{Date:}            & \reldate              \\
-          \textbf{Audience:}        & Library Working Group \\
-          \textbf{Author:}          & Casey Carter          \\
+          \textbf{Document Number:} & {\larger\docno}                 \\
+          \textbf{Date:}            & \reldate                        \\
+          \textbf{Audience:}        & Library Evolution Working Group \\
+          \textbf{Authors:}         & Casey Carter                    \\
+                                    & Christopher Di Bella            \\
+                                    & Eric Niebler                    \\
           \textbf{Reply to:}        & casey@carter.net
           \end{tabular}
 }
@@ -21,82 +23,11 @@
 
 \chapter{Abstract}
 
-The support for contiguous iterators in the working draft is missing a useful
-feature: a mechanism to convert a contiguous iterator into a pointer that
-denotes the same object. This paper proposes that \tcode{std::to_address} be
-that mechanism.
-
-\begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
-\begin{codeblock}
-extern "C" int some_c_api(T* ptr, size_t size);
-extern "C" int other_c_api(T* first, T* last);
-
-template<ContiguousIterator I>
-int try_useful_things(I i, size_t n) {
-  // Expects: [i, n) is a valid range
-  @\removed{if (n == 0) \{}@
-    @\removed{// Oops - can't dereference}@
-    @\removed{// past-the-end iterator}@
-    @\removed{throw something;}@
-  @\removed{\}}@
-  return some_c_api(@\removed{addressof(*i)}@, n);
-}
-
-template<ContiguousIterator I>
-int try_useful_things(I i, I j) {
-  // Expects: [i, j) is a valid range
-  @\removed{if (i == j) \{}@
-    @\removed{// Oops - can't dereference}@
-    @\removed{// past-the-end iterator}@
-    @\removed{throw something;}@
-  }
-  return other_c_api(@\removed{addressof(*i)}@,
-                     @\removed{addressof(*i)}@ + (j - i));
-}
-
-template<ContiguousIterator I>
-int try_useful_things(I i, I j) {
-  // Expects: \range{i}{j} is a valid range
-  if (i == j) {
-    // Oops - can't dereference past-the-end iterator
-    throw something;
-  }
-  return some_c_api(addressof(*i),
-                    addressof(*i) + (j - i));
-}
-\end{codeblock} & \begin{codeblock}
-extern "C" int some_c_api(T* ptr, size_t size);
-extern "C" int other_c_api(T* first, T* last);
-
-template<ContiguousIterator I>
-int try_useful_things(I i, size_t n) {
-  // Expects: [i, n) is a valid range
-  return some_c_api(@\added{to_address(i)}@, n);
-}
-
-template<ContiguousIterator I>
-int try_useful_things(I i, I j) {
-  // Expects: [i, j) is a valid range
-  return other_c_api(@\added{to_address(i)}@,
-                     @\added{to_address(j)}@);
-}
-\end{codeblock} \\
-\end{libtab2}
+The \tcode{std::boolean} concept strikes the perfect balance of being hard to validate, hard to
+teach, and hard to use - as is the subject of some US NB comments. This paper proposes replacing the
+failed concept with a formulation that is simple to validate, teach, and use.
 
 \section{Revision History}
-\subsection{Revision 1}
-\begin{itemize}
-\item Update Tony Table: C APIs can't be overloaded, and add a bit of markup to
-  make the differences stand out.
-\item Correct bad pointer arithmetic in the description of the address of a
-  past-the-end iterator whose predecessor is dereferenceable.
-\item Remove bad \tcode{;} after expression in a
-  \grammarterm{compound-requirement} in the definition of
-  \libconcept{ContiguousIterator}.
-\item Remove \tcode{operator->} requirement (which was not a core part of the
-  proposal) due to LWG concerns.
-\end{itemize}
-
 \subsection{Revision 0}
 \begin{itemize}
 \item Initial revision.
@@ -104,166 +35,286 @@ int try_useful_things(I i, I j) {
 
 \chapter{Problem description}
 
-P0944R0 ``Contiguous ranges''~\cite{P0944} proposed support for contiguous
-ranges and iterators, which was merged into P0896R4 ``The One Ranges
-Proposal''~\cite{P0896R4} and then merged into the Working Draft. Neither
-P0944R0 nor P0896R4 proposed a means of obtaining a pointer to the element
-denoted by an arbitrary \tcode{ContiguousIterator}. At the time, the author was
-under the impression that such a mechanism had been a ``third rail'' for past
-contiguous iterator proposals~\cite{N4183}, and that requiring such a mechanism
-would make it impossible to require the iterators of the Standard Library
-containers to model \tcode{ContiguousIterator}. Those implementability concerns
-have since been rectified.
+The \libconcept{std::boolean} concept is defined in \cxxref{concept.boolean} (quoting the pre-Belfast
+working draft):
 
-Note that obtaining a pointer value from a dereferenceable
-\tcode{ContiguousIterator} is trivial: \tcode{std::addressof(*i)} returns such a
-pointer value for a contiguous iterator \tcode{i}. Dereferencing a
-non-dereferenceable iterator is (unsurprisingly) not well-defined, so this
-mechanism isn't suitable for iterators not known to be dereferenceable.
-Obtaining a pointer value for the potentially non-dereferenceable iterator
-\tcode{j} that is the past-the-end iterator of a range \range{i}{j} thus
-requires a different mechanism that is well-defined for past-the-end iterators.
-Ideally the mechanism would also be well-defined for dereferenceable iterators
-so it can be used uniformly.
+\begin{quote}
+\pnum
+The \libconcept{boolean} concept specifies the requirements on a type that is usable as a truth
+value.
 
-P0653R2 ``Utility to convert a pointer to a raw pointer''~\cite{P0653R2} added
-the function \tcode{std::to_address}\cxxiref{pointer.conversion} to the Standard
-Library which converts values of so-called ``fancy'' pointer types and standard
-smart pointer types to pointer values. In the interest of spelling similar
-things  similarly, it seems a good idea to reuse this facility to convert
-\tcode{ContiguousIterator}s to pointer values. In practice, that means that a
-type \tcode{I} must be a pointer type or
+\begin{codeblock}
+template<class B>
+  concept boolean =
+    movable<remove_cvref_t<B>> &&
+    requires(const remove_reference_t<B>& b1,
+             const remove_reference_t<B>& b2, const bool a) {
+      { b1 } -> convertible_to<bool>;
+      { !b1 } -> convertible_to<bool>;
+      { b1 && b2 } -> same_as<bool>;
+      { b1 &&  a } -> same_as<bool>;
+      {  a && b2 } -> same_as<bool>;
+      { b1 || b2 } -> same_as<bool>;
+      { b1 ||  a } -> same_as<bool>;
+      {  a || b2 } -> same_as<bool>;
+      { b1 == b2 } -> convertible_to<bool>;
+      { b1 ==  a } -> convertible_to<bool>;
+      {  a == b2 } -> convertible_to<bool>;
+      { b1 != b2 } -> convertible_to<bool>;
+      { b1 !=  a } -> convertible_to<bool>;
+      {  a != b2 } -> convertible_to<bool>;
+    };
+\end{codeblock}
+
+\pnum
+For some type \tcode{B}, let \tcode{b1} and \tcode{b2} be lvalues of type
+\tcode{const remove_reference_t<B>}. \tcode{B} models \libconcept{boolean} only if
 \begin{itemize}
-\item specialize \tcode{pointer_traits<I>} with a member \tcode{element_type}
-  or have a nested member \tcode{element_type}
-  so instantiation of \tcode{pointer_traits<I>} succeeds, and
-\item Either implement \tcode{pointer_traits<I>::to_address} or admit
-  past-the-end (potentially non-dereferenceable) iterator values in
-  \tcode{operator->()}.
+\item \tcode{bool(b1) == !bool(!b1)}.
+\item \tcode{(b1 \&\& b2)}, \tcode{(b1 \&\& bool(b2))}, and \tcode{(bool(b1) \&\& b2)} are all equal
+  to \tcode{(bool(b1) \&\& bool(b2))}, and have the same short-circuit evaluation.
+\item \tcode{(b1 || b2)}, \tcode{(b1 || bool(b2))}, and \tcode{(bool(b1) || b2)} are all equal to
+  \tcode{(bool(b1) || bool(b2))}, and have the same short-circuit evaluation.
+\item \tcode{bool(b1 == b2)}, \tcode{bool(b1 == bool(b2))}, and \tcode{bool(bool(b1) == b2)} are all
+  equal to \tcode{(bool(b1) == bool(b2))}.
+\item \tcode{bool(b1 != b2)}, \tcode{bool(b1 != bool(b2))}, and \tcode{bool(bool(b1) != b2)} are all
+  equal to \tcode{(bool(b1) != bool(b2))}.
 \end{itemize}
+\end{quote}
+
+The Standard Library requires the results of evaluating predicate expresssions to model
+\libconcept{boolean} which indicates when, for example, comparison expressions are true or false.
+The concept has accreted requirements over time in an attempt to provide a more complete
+approximation of the grammar and semantics of boolean expressions. It has in the process become
+somewhat complex, with fourteen direct expression requirements and quite a few semantic constraints
+to relate those expressions to each other. This level of definition complexity would be acceptable
+if the concept is easy to apply and reason about. Unfortunately, that is not the case.
+
+\section{Why the complexity?}
+There are two different kinds of binary expressions required by \libconcept{boolean}: those that
+operate on two operands of the same type (an lvalue \tcode{const B}), and those that mix a \tcode{B}
+operand with a \tcode{bool} operand. Ideally, the concept would constrain how those expressions
+work when applied to any pair of operands whose types each model the concept: this would achieve the
+fully-general boolean grammar we want to express. There is no way to express such a universal
+quantification using C++ concepts, so we fall back to applying requirements to only the type in
+question and to \tcode{bool} itself.
+
+It has been suggested that the universal quantification be applied outside of the concept syntax as
+a set of purely semantic requirements. This is feasible, but perhaps not necessarily desirable. Do
+we really want to have a concept that can only truly be verified by examining the entire program
+text? Shouldn't I be able to reason locally, say about whether \tcode{bool} satisfies the
+\libconcept{boolean} concept? In the presence of universally quantified semantic constraints a type
+satisfies the concept only if there is - for example - no overloaded operator anywhere in the
+program that violates the semantic requirements.
+
+\section{Non-uniformity of application}
+So the formulation of \libconcept{boolean} is necessarily a compromise; we must step outside the
+required expressions when forming boolean expressions with operands of multiple types - other than
+\tcode{bool} - that model the concept by converting those operands to \tcode{bool}. Consequently,
+most simple uses need not force any conversions:
+\begin{codeblock}
+template<input_iterator I, sentinel_for<I> S, weakly_incrementable O>
+  requires indirectly_copyable<I, O>
+O copy(I first, S last, O out) {
+  for(; first != last; ++first, (void) ++out) {
+    *out = *first;
+  }
+  return out;
+}
+\end{codeblock}
+which makes it easy to forget to force conversions when we venture nearer the edges of the design:
+\begin{codeblock}
+template<input_iterator I1, sentinel_for<I1> S1, input_iterator I2, sentinel_for<I2> S2>
+  requires indirectly_comparable<I1, I2, ranges::equal>
+bool equal(I1 first1, S1 last1, I2 first2, S2 last2) {
+  for(; first1 != last1 && first2 != last2; // Oops; both need casts to bool
+      ++first1, (void) ++first2) {
+    if (*first1 != *first2)
+      return false;
+  }
+  return first1 == last1 && first2 == last2; // Oops; here as well
+}
+\end{codeblock}
+Style guides will presumably ``fix'' this problem by mandating that all expressions whose types
+model \libconcept{boolean} are converted to \tcode{bool}, implicitly or explicitly. That simple and
+universal rule makes it far easier to teach and use the concept without error, which begs the
+question of what we get from \libconcept{boolean}'s current complex definition.
+
+Certainly not ease of application and modeling. Quickly look back at the syntactic and semantic
+requirements; are they satisfied by \tcode{void*}? How about \tcode{int}? Is it readily apparent that
+integral types \tcode{T} model \libconcept{boolean} only over the restricted domain
+\tcode{\{T(0), T(1)\}}? The authors' experience is that this formulation is far from transparent to
+new users.
+
+\subsection{Costs}
+Checking fourteen \grammarterm{compound-requirement}s has a non-negligible compile time cost.
+Overload resolution for each required expression and satisfaction checking of the
+\grammarterm{type-requirement} are not free. Given that other concepts require often several
+predicate expressions - e.g., \libconcept{sentinel_for}, \libconcept{equality_comparable}, and the
+mother of all comparison concepts \libconcept{totally_ordered_with} - the checking costs are often
+greatly magnified.
+
+It's unfortunate that checking \libconcept{boolean} is so expensive, especially in the presence of
+a ``always force a conversion'' style guideline which suggests that very few of the concept's required
+expressions will be used in practice. The current formulation is hard to validate, hard to use, and
+hard to teach.
 
 \chapter{Proposal}
 
-The basic proposal is to add a requirement to the
-\libconcept{ContiguousIterator} concept that the expression
-\tcode{std::to_address(i)} for an lvalue \tcode{i} of type \tcode{const I} must
-\begin{itemize}
-\item be well-formed and yield a pointer of type
-  \tcode{add_pointer_t<iter_reference_t<i>>},
-\item be well-defined for both dereferenceable and past-the-end pointer values,
-\item yield a pointer value equal to \tcode{std::addressof(*i)} if \tcode{i} is
-  dereferenceable, or \tcode{1 + std::addressof(*(i - 1))} if \tcode{i - 1} is
-  dereferenceable.
-\end{itemize}
-
-Since dereferenceable \libconcept{ContiguousIterators} always denote objects -
-their reference types are always lvalue references - they can always feasibly
-implement the \tcode{->} operator. \tcode{->} is useful in contexts where the
-value type of the iterator is concrete, so we propose requiring it for all
-\libconcept{ContiguousIterators}.
-\begin{note}
-Recall that the iterator concepts do not generally require \tcode{operator->} as
-do the ``old'' iterator requirements.
-\end{note}
-
-Now that there's a mechanism to retrieve a pointer from a potentially
-non-dereferenceable iterator, we can also cleanup the edge cases in
-\tcode{ranges::data} and \tcode{ranges::view_interface::data} which return
-\tcode{nullptr} for an empty \tcode{ContiguousRange} rather than unconditionally
-returning the pointer value that the \tcode{begin} iterator denotes.
-
-\chapter{Technical specifications}
-Change \cxxref{iterator.concept.contiguous} as follows:
-\begin{quote}
-\begin{codeblock}
-template<class I>
-  concept @\libconcept{ContiguousIterator}@ =
-    RandomAccessIterator<I> &&
-    DerivedFrom<@\placeholdernc{ITER_CONCEPT}@(I), contiguous_iterator_tag> &&
-    is_lvalue_reference_v<iter_reference_t<I>> &&
-    Same<iter_value_t<I>, remove_cvref_t<iter_reference_t<I>>>@\changed{;}{ \&\&}@
-    @\added{requires(const I\& i) \{}@
-      @\added{\{ to_address(i) \} -> Same<add_pointer_t<iter_reference_t<I>>>;}@
-    @\added{\};}@
-\end{codeblock}
-
-\setcounter{Paras}{1}
-\pnum
-Let \tcode{a} and \tcode{b} be dereferenceable iterators \added{and \tcode{c} a
-non-dereferenceable iterator} of type \tcode{I}
-such that \tcode{b} is reachable from \tcode{a} \added{and \tcode{c} is
-reachable from \tcode{b}},
-and let \tcode{D} be \tcode{iter_difference_t<I>}.
-The type \tcode{I} models \libconcept{ContiguousIterator} only if
-\begin{removedblock}
-\tcode{addressof(*(a + D(b - a)))}
-is equal to
-\tcode{addressof(*a) + D(b - a)}.
-\end{removedblock}
-\begin{addedblock}
-\begin{itemize}
-\item \tcode{to_address(a) == addressof(*a),}
-\item \tcode{to_address(b) == to_address(a) + D(b - a)}, and
-\item \tcode{to_address(c) == to_address(a) + D(c - a)}.
-\end{itemize}
-\end{addedblock}
-\end{quote}
-
-Change \cxxref{range.prim.data} as follows:
-\begin{quote}
-\setcounter{Paras}{0}
-\pnum
-The name \tcode{data} denotes a customization point
-object\cxxiref{customization.point.object}. The expression
-\tcode{ranges::data(E)} for some subexpression \tcode{E} is
-expression-equivalent to:
+Several alternative formulations of \libconcept{boolean} have been suggested to the authors.
 
 \begin{itemize}
-\item
-  If \tcode{E} is an lvalue, \tcode{\placeholdernc{decay-copy}(E.data())}
-  if it is a valid expression of pointer to object type.
-
-\item
-  Otherwise, if \tcode{ranges::begin(E)} is a valid expression whose type models
-  \tcode{ContiguousIterator}, \tcode{\added{to_address(ranges::begin(E))}}\added{.}
-  \begin{removedblock}
+\item Just use \tcode{bool}, i.e., require predicate expressions to be prvalues of type \tcode{bool}.
+  This simple formulation notably doesn't need a named concept at all: we can replace uses of
+  \tcode{\libconcept{boolean}<T>} (and the \grammarterm{type-requirement}
+  \tcode{-> \libconcept{boolean};}) with \tcode{\libconcept{same_as}<T, bool>} (respectively
+  \tcode{-> \libconcept{same_as}<bool>;}).
+\item Use \tcode{\libconcept{decays_to}<T, bool>}, where \libconcept{decays_to} is:
   \begin{codeblock}
-  ranges::begin(E) == ranges::end(E) ? nullptr : addressof(*ranges::begin(E))
+  template <class T, class U>
+  concept decays_to = same_as<decay_t<T>, U>;
   \end{codeblock}
-
-  except that \tcode{E} is evaluated only once.
-  \end{removedblock}
-
-\item
-  Otherwise, \tcode{ranges::data(E)} is ill-formed.
-  \begin{note}
-  This case can result in substitution failure when \tcode{ranges::data(E)}
-  appears in the immediate context of a template instantiation.
-  \end{note}
+  A slight generalization of the above, this additionally allows predicate expressions that yield an
+  lvalue (possibly-\tcode{const}) \tcode{bool}.
+\item Use \tcode{one_of<T, bool, true_type, false_type>} where \libconcept{one_of} is:
+  \begin{codeblock}
+  template <class T, class... Us>
+  concept one_of = (same_as<decay_t<T>, Us> && ...);
+  \end{codeblock}
+  This formulation cleverly covers the types for which \libconcept{boolean} support is most often
+  requested.
 \end{itemize}
-\end{quote}
+These formulations notably never\footnote{Ignoring for the moment that a user could e.g. define
+an operator overload that takes \tcode{bool} and \tcode{true_type} in the global namespace.} require
+a user to force a conversion to \tcode{bool} when forming binary expressions, which is a nicely
+consistent rule for usage.
 
-Change \cxxref{view.interface} as follows:
+The other consistent rule is ``always force a conversion,'' and there are at least two suggestions
+that use that rule:
+\begin{itemize}
+\item ``Contextually convertible to \tcode{bool}.'' There's no convenient short spelling for
+  contextual conversion to \tcode{bool}, so we'd need to keep a named concept:
+  \begin{codeblock}
+  template <class T>
+  concept boolean = requires(const remove_reference_t<T>& t) {
+    t ? 0 : 0; // The conditional operator contextually converts its first operand to bool.
+  };
+  \end{codeblock}
+  This is the rule the [algorithms] have used for predicates for decades.
+\item ``explicitly and implicitly convertible to \tcode{bool}'' which is similar to the above -
+  contextual conversion to \tcode{bool} can trigger explicit conversions - with the additional
+  requirement for implicit conversion. This has the short spellings
+  \tcode{\libconcept{convertible_to<T, bool>}} and \tcode{-> \libconcept{convertible_to}<bool>;}.
+  While this formulation is slightly more restrictive than ``contextually convertible,'' the direct
+  reuse of the \libconcept{convertible_to} concept is attractive.
+\end{itemize}
+
+The authors propose this last formulation be used to replace the \libconcept{boolean} concept for
+C++20. \tcode{\libconcept{convertible_to}<bool>} seems to strike a balance between the concerns
+favored by the other formulations. There's a short spelling, allowing the named concept to be
+removed. It admits a variety of models including all the examples currently listed as
+satisfying \libconcept{boolean}. It's relatively cheap to check (as are all of the noted
+alternatives). It's quite close to the ``old'' notion of what a predicate should yield. It uses the
+other library concepts well: \tcode{\libconcept{convertible_to}<T>} \emph{should} be what we teach
+programmers to reach for when they want to capture the set of types that convert to \tcode{T}.
+
+\chapter{Technical Specifications} %% FIXME
+Change \cxxref{cmp.concept} as follows:
 \begin{quote}
 \begin{codeblock}
-namespace std::ranges {
-  template<class D>
-    requires is_class_v<D> && Same<D, remove_cv_t<D>>
-  class view_interface : public view_base {
-    [...]
-
-    constexpr auto data() requires ContiguousIterator<iterator_t<D>> {
-      @\removed{return ranges::empty(derived()) ? nullptr : addressof(*ranges::begin(derived()));}@
-      @\added{return to_address(ranges::begin(derived()));}@
-    }
-    constexpr auto data() const
-      requires Range<const D> && ContiguousIterator<iterator_t<const D>> {
-        @\removed{return ranges::empty(derived()) ? nullptr : addressof(*ranges::begin(derived()));}@
-        @\added{return to_address(ranges::begin(derived()));}@
-      }
-
-    [...]
+template<class T, class U>
+concept @\placeholder{partially-ordered-with}@ = // \expos
+  requires(const remove_reference_t<T>& t, const remove_reference_t<U>& u) {
+    { t <  u } -> @\changed{boolean}{convertible_to<bool>}@;
+    { t >  u } -> @\changed{boolean}{convertible_to<bool>}@;
+    { t <= u } -> @\changed{boolean}{convertible_to<bool>}@;
+    { t >= u } -> @\changed{boolean}{convertible_to<bool>}@;
+    { u <  t } -> @\changed{boolean}{convertible_to<bool>}@;
+    { u >  t } -> @\changed{boolean}{convertible_to<bool>}@;
+    { u <= t } -> @\changed{boolean}{convertible_to<bool>}@;
+    { u >= t } -> @\changed{boolean}{convertible_to<bool>}@;
   };
+\end{codeblock}
+\end{quote}
+
+Change \cxxref{concepts.syn} as follows:
+\begin{quote}
+\begin{codeblock}
+namespace std {
+  [...]
+  // 18.5, comparison concepts
+  @\removed{// 18.5.2, concept boolean}@
+  @\removed{template<class B>}@
+    @\removed{concept boolean = \seebelow;}@
+  [...]
 }
+\end{codeblock}
+\end{quote}
+
+Strike the subclause \cxxref{concept.boolean}.
+
+Change \cxxref{concept.equalitycomparable} as follows:
+\begin{quote}
+\begin{codeblock}
+template<class T, class U>
+  concept weakly-equality-comparable-with = // exposition only
+    requires(const remove_reference_t<T>& t,
+             const remove_reference_t<U>& u) {
+      { t == u } -> @\changed{boolean}{convertible_to<bool>}@;
+      { t != u } -> @\changed{boolean}{convertible_to<bool>}@;
+      { u == t } -> @\changed{boolean}{convertible_to<bool>}@;
+      { u != t } -> @\changed{boolean}{convertible_to<bool>}@;
+    };
+\end{codeblock}
+[...]
+\end{quote}
+
+Change \cxxref{concept.totallyordered} as follows:
+\begin{quote}
+\begin{codeblock}
+template<class T>
+  concept totally_ordered =
+    equality_comparable<T> &&
+    requires(const remove_reference_t<T>& a,
+             const remove_reference_t<T>& b) {
+      { a <  b } -> @\changed{boolean}{convertible_to<bool>}@;
+      { a >  b } -> @\changed{boolean}{convertible_to<bool>}@;
+      { a <= b } -> @\changed{boolean}{convertible_to<bool>}@;
+      { a >= b } -> @\changed{boolean}{convertible_to<bool>}@;
+    };
+\end{codeblock}
+[...]
+\begin{codeblock}
+template<class T, class U>
+  concept totally_ordered_with =
+    totally_ordered<T> && totally_ordered<U> &&
+    common_reference_with<const remove_reference_t<T>&, const remove_reference_t<U>&> &&
+    totally_ordered<
+      common_reference_t<
+        const remove_reference_t<T>&,
+        const remove_reference_t<U>&>> &&
+    equality_comparable_with<T, U> &&
+    requires(const remove_reference_t<T>& t,
+             const remove_reference_t<U>& u) {
+      { t <  u } -> @\changed{boolean}{convertible_to<bool>}@;
+      { t >  u } -> @\changed{boolean}{convertible_to<bool>}@;
+      { t <= u } -> @\changed{boolean}{convertible_to<bool>}@;
+      { t >= u } -> @\changed{boolean}{convertible_to<bool>}@;
+      { u <  t } -> @\changed{boolean}{convertible_to<bool>}@;
+      { u >  t } -> @\changed{boolean}{convertible_to<bool>}@;
+      { u <= t } -> @\changed{boolean}{convertible_to<bool>}@;
+      { u >= t } -> @\changed{boolean}{convertible_to<bool>}@;
+    };
+\end{codeblock}
+[...]
+\end{quote}
+
+Change \cxxref{concept.predicate} as follows:
+\begin{quote}
+\begin{codeblock}
+template<class F, class... Args>
+  concept predicate =
+    regular_invocable<F, Args...> &&
+    @\changed{boolean}{convertible_to}@<invoke_result_t<F, Args...>@\added{, bool}@>;
 \end{codeblock}
 \end{quote}
