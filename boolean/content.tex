@@ -1,0 +1,269 @@
+\begingroup
+\def\hd{\begin{tabular}{lll}
+          \textbf{Document Number:} & {\larger\docno}       \\
+          \textbf{Date:}            & \reldate              \\
+          \textbf{Audience:}        & Library Working Group \\
+          \textbf{Author:}          & Casey Carter          \\
+          \textbf{Reply to:}        & casey@carter.net
+          \end{tabular}
+}
+\newlength{\hdwidth}
+\settowidth{\hdwidth}{\hd}
+\hfill\begin{minipage}{\hdwidth}\hd\end{minipage}
+\endgroup
+
+\vspace{0.5cm}
+\begin{center}
+\textbf{\Huge \doctitle}
+\end{center}
+
+\vspace{0.5cm}
+
+\chapter{Abstract}
+
+The support for contiguous iterators in the working draft is missing a useful
+feature: a mechanism to convert a contiguous iterator into a pointer that
+denotes the same object. This paper proposes that \tcode{std::to_address} be
+that mechanism.
+
+\begin{libtab2}{Tony Table}{tab:tony}{l|l}{Before}{After}
+\begin{codeblock}
+extern "C" int some_c_api(T* ptr, size_t size);
+extern "C" int other_c_api(T* first, T* last);
+
+template<ContiguousIterator I>
+int try_useful_things(I i, size_t n) {
+  // Expects: [i, n) is a valid range
+  @\removed{if (n == 0) \{}@
+    @\removed{// Oops - can't dereference}@
+    @\removed{// past-the-end iterator}@
+    @\removed{throw something;}@
+  @\removed{\}}@
+  return some_c_api(@\removed{addressof(*i)}@, n);
+}
+
+template<ContiguousIterator I>
+int try_useful_things(I i, I j) {
+  // Expects: [i, j) is a valid range
+  @\removed{if (i == j) \{}@
+    @\removed{// Oops - can't dereference}@
+    @\removed{// past-the-end iterator}@
+    @\removed{throw something;}@
+  }
+  return other_c_api(@\removed{addressof(*i)}@,
+                     @\removed{addressof(*i)}@ + (j - i));
+}
+
+template<ContiguousIterator I>
+int try_useful_things(I i, I j) {
+  // Expects: \range{i}{j} is a valid range
+  if (i == j) {
+    // Oops - can't dereference past-the-end iterator
+    throw something;
+  }
+  return some_c_api(addressof(*i),
+                    addressof(*i) + (j - i));
+}
+\end{codeblock} & \begin{codeblock}
+extern "C" int some_c_api(T* ptr, size_t size);
+extern "C" int other_c_api(T* first, T* last);
+
+template<ContiguousIterator I>
+int try_useful_things(I i, size_t n) {
+  // Expects: [i, n) is a valid range
+  return some_c_api(@\added{to_address(i)}@, n);
+}
+
+template<ContiguousIterator I>
+int try_useful_things(I i, I j) {
+  // Expects: [i, j) is a valid range
+  return other_c_api(@\added{to_address(i)}@,
+                     @\added{to_address(j)}@);
+}
+\end{codeblock} \\
+\end{libtab2}
+
+\section{Revision History}
+\subsection{Revision 1}
+\begin{itemize}
+\item Update Tony Table: C APIs can't be overloaded, and add a bit of markup to
+  make the differences stand out.
+\item Correct bad pointer arithmetic in the description of the address of a
+  past-the-end iterator whose predecessor is dereferenceable.
+\item Remove bad \tcode{;} after expression in a
+  \grammarterm{compound-requirement} in the definition of
+  \libconcept{ContiguousIterator}.
+\item Remove \tcode{operator->} requirement (which was not a core part of the
+  proposal) due to LWG concerns.
+\end{itemize}
+
+\subsection{Revision 0}
+\begin{itemize}
+\item Initial revision.
+\end{itemize}
+
+\chapter{Problem description}
+
+P0944R0 ``Contiguous ranges''~\cite{P0944} proposed support for contiguous
+ranges and iterators, which was merged into P0896R4 ``The One Ranges
+Proposal''~\cite{P0896R4} and then merged into the Working Draft. Neither
+P0944R0 nor P0896R4 proposed a means of obtaining a pointer to the element
+denoted by an arbitrary \tcode{ContiguousIterator}. At the time, the author was
+under the impression that such a mechanism had been a ``third rail'' for past
+contiguous iterator proposals~\cite{N4183}, and that requiring such a mechanism
+would make it impossible to require the iterators of the Standard Library
+containers to model \tcode{ContiguousIterator}. Those implementability concerns
+have since been rectified.
+
+Note that obtaining a pointer value from a dereferenceable
+\tcode{ContiguousIterator} is trivial: \tcode{std::addressof(*i)} returns such a
+pointer value for a contiguous iterator \tcode{i}. Dereferencing a
+non-dereferenceable iterator is (unsurprisingly) not well-defined, so this
+mechanism isn't suitable for iterators not known to be dereferenceable.
+Obtaining a pointer value for the potentially non-dereferenceable iterator
+\tcode{j} that is the past-the-end iterator of a range \range{i}{j} thus
+requires a different mechanism that is well-defined for past-the-end iterators.
+Ideally the mechanism would also be well-defined for dereferenceable iterators
+so it can be used uniformly.
+
+P0653R2 ``Utility to convert a pointer to a raw pointer''~\cite{P0653R2} added
+the function \tcode{std::to_address}\cxxiref{pointer.conversion} to the Standard
+Library which converts values of so-called ``fancy'' pointer types and standard
+smart pointer types to pointer values. In the interest of spelling similar
+things  similarly, it seems a good idea to reuse this facility to convert
+\tcode{ContiguousIterator}s to pointer values. In practice, that means that a
+type \tcode{I} must be a pointer type or
+\begin{itemize}
+\item specialize \tcode{pointer_traits<I>} with a member \tcode{element_type}
+  or have a nested member \tcode{element_type}
+  so instantiation of \tcode{pointer_traits<I>} succeeds, and
+\item Either implement \tcode{pointer_traits<I>::to_address} or admit
+  past-the-end (potentially non-dereferenceable) iterator values in
+  \tcode{operator->()}.
+\end{itemize}
+
+\chapter{Proposal}
+
+The basic proposal is to add a requirement to the
+\libconcept{ContiguousIterator} concept that the expression
+\tcode{std::to_address(i)} for an lvalue \tcode{i} of type \tcode{const I} must
+\begin{itemize}
+\item be well-formed and yield a pointer of type
+  \tcode{add_pointer_t<iter_reference_t<i>>},
+\item be well-defined for both dereferenceable and past-the-end pointer values,
+\item yield a pointer value equal to \tcode{std::addressof(*i)} if \tcode{i} is
+  dereferenceable, or \tcode{1 + std::addressof(*(i - 1))} if \tcode{i - 1} is
+  dereferenceable.
+\end{itemize}
+
+Since dereferenceable \libconcept{ContiguousIterators} always denote objects -
+their reference types are always lvalue references - they can always feasibly
+implement the \tcode{->} operator. \tcode{->} is useful in contexts where the
+value type of the iterator is concrete, so we propose requiring it for all
+\libconcept{ContiguousIterators}.
+\begin{note}
+Recall that the iterator concepts do not generally require \tcode{operator->} as
+do the ``old'' iterator requirements.
+\end{note}
+
+Now that there's a mechanism to retrieve a pointer from a potentially
+non-dereferenceable iterator, we can also cleanup the edge cases in
+\tcode{ranges::data} and \tcode{ranges::view_interface::data} which return
+\tcode{nullptr} for an empty \tcode{ContiguousRange} rather than unconditionally
+returning the pointer value that the \tcode{begin} iterator denotes.
+
+\chapter{Technical specifications}
+Change \cxxref{iterator.concept.contiguous} as follows:
+\begin{quote}
+\begin{codeblock}
+template<class I>
+  concept @\libconcept{ContiguousIterator}@ =
+    RandomAccessIterator<I> &&
+    DerivedFrom<@\placeholdernc{ITER_CONCEPT}@(I), contiguous_iterator_tag> &&
+    is_lvalue_reference_v<iter_reference_t<I>> &&
+    Same<iter_value_t<I>, remove_cvref_t<iter_reference_t<I>>>@\changed{;}{ \&\&}@
+    @\added{requires(const I\& i) \{}@
+      @\added{\{ to_address(i) \} -> Same<add_pointer_t<iter_reference_t<I>>>;}@
+    @\added{\};}@
+\end{codeblock}
+
+\setcounter{Paras}{1}
+\pnum
+Let \tcode{a} and \tcode{b} be dereferenceable iterators \added{and \tcode{c} a
+non-dereferenceable iterator} of type \tcode{I}
+such that \tcode{b} is reachable from \tcode{a} \added{and \tcode{c} is
+reachable from \tcode{b}},
+and let \tcode{D} be \tcode{iter_difference_t<I>}.
+The type \tcode{I} models \libconcept{ContiguousIterator} only if
+\begin{removedblock}
+\tcode{addressof(*(a + D(b - a)))}
+is equal to
+\tcode{addressof(*a) + D(b - a)}.
+\end{removedblock}
+\begin{addedblock}
+\begin{itemize}
+\item \tcode{to_address(a) == addressof(*a),}
+\item \tcode{to_address(b) == to_address(a) + D(b - a)}, and
+\item \tcode{to_address(c) == to_address(a) + D(c - a)}.
+\end{itemize}
+\end{addedblock}
+\end{quote}
+
+Change \cxxref{range.prim.data} as follows:
+\begin{quote}
+\setcounter{Paras}{0}
+\pnum
+The name \tcode{data} denotes a customization point
+object\cxxiref{customization.point.object}. The expression
+\tcode{ranges::data(E)} for some subexpression \tcode{E} is
+expression-equivalent to:
+
+\begin{itemize}
+\item
+  If \tcode{E} is an lvalue, \tcode{\placeholdernc{decay-copy}(E.data())}
+  if it is a valid expression of pointer to object type.
+
+\item
+  Otherwise, if \tcode{ranges::begin(E)} is a valid expression whose type models
+  \tcode{ContiguousIterator}, \tcode{\added{to_address(ranges::begin(E))}}\added{.}
+  \begin{removedblock}
+  \begin{codeblock}
+  ranges::begin(E) == ranges::end(E) ? nullptr : addressof(*ranges::begin(E))
+  \end{codeblock}
+
+  except that \tcode{E} is evaluated only once.
+  \end{removedblock}
+
+\item
+  Otherwise, \tcode{ranges::data(E)} is ill-formed.
+  \begin{note}
+  This case can result in substitution failure when \tcode{ranges::data(E)}
+  appears in the immediate context of a template instantiation.
+  \end{note}
+\end{itemize}
+\end{quote}
+
+Change \cxxref{view.interface} as follows:
+\begin{quote}
+\begin{codeblock}
+namespace std::ranges {
+  template<class D>
+    requires is_class_v<D> && Same<D, remove_cv_t<D>>
+  class view_interface : public view_base {
+    [...]
+
+    constexpr auto data() requires ContiguousIterator<iterator_t<D>> {
+      @\removed{return ranges::empty(derived()) ? nullptr : addressof(*ranges::begin(derived()));}@
+      @\added{return to_address(ranges::begin(derived()));}@
+    }
+    constexpr auto data() const
+      requires Range<const D> && ContiguousIterator<iterator_t<const D>> {
+        @\removed{return ranges::empty(derived()) ? nullptr : addressof(*ranges::begin(derived()));}@
+        @\added{return to_address(ranges::begin(derived()));}@
+      }
+
+    [...]
+  };
+}
+\end{codeblock}
+\end{quote}
