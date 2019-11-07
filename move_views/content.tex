@@ -82,6 +82,14 @@ return fib() | view::take(20);
 \end{libtab2}
 
 \section{Revision History}
+\subsection{Revision 1}
+\begin{itemize}
+\item
+  Add a semantic requirement to \tcode{view}
+  requiring copy operations to be O(1)
+  if present.
+\end{itemize}
+
 \subsection{Revision 0}
 \begin{itemize}
 \item Inserted many words into an empty document.
@@ -284,71 +292,80 @@ adaptor (thus leaving it invalid).
 
 
 \chapter{Technical specifications}
-Change \cxxref{range.req.general}/2 as follows \begin{note}There's a drive-by
+Change \cxxref{range.req.general}/2 as follows:
+\begin{note}
+There's a drive-by
 edit here to require O(1) destruction: the intent has always been that
-\libconcept{View}s have only constant-time operations, we apparently forgot that
-destruction is an operation.\end{note}:
+\libconcept{view}s have only constant-time operations, we apparently forgot that
+destruction is an operation. We also require copies to be O(1) if they are valid.
+\end{note}
 \begin{quote}
-... The \libconcept{View} concept specifies requirements on a \libconcept{Range} type with
-constant-time \changed{copy and assign}{move} operations \added{and destruction}.
+... The \libconcept{view} concept specifies requirements on a \libconcept{range} type with
+constant-time \added{destruction and} \changed{copy and assign}{move} operations.
 \end{quote}
 
 Change \cxxref{range.view} as follows:
 \begin{quote}
+\begin{codeblock}
+@\removed{template<class T>}@
+  @\removed{concept view =}@
+    @\removed{range<T> \&\& semiregular<T> \&\& enable_view<T>;}@
+\end{codeblock}
+
 \pnum
-The \libconcept{View} concept specifies the requirements of a \libconcept{Range} type
+The \libconcept{view} concept specifies the requirements of a \libconcept{range} type
 that has constant time \removed{copy,} move\added{ construction},
 \added{move} assignment\added{, and destruction} \removed{operators}; that is,
 the cost of these operations is not proportional to
-the number of elements in the \libconcept{View}.
+the number of elements in the \libconcept{view}.
+
+\begin{codeblock}
+@\added{template<class T>}@
+  @\added{concept view =}@
+    @\added{range<T> \&\& movable<T> \&\& default_constructible<T> \&\& enable_view<T>;}@
+\end{codeblock}
+
+\pnum
+\added{\tcode{T} models \libconcept{view} only if:}
+\begin{itemize}
+\item
+  \tcode{\added{\libconcept{copy_constructible}<T>}}\added{ is \tcode{false},
+  or \tcode{T} has \bigoh{1} copy construction; and}
+\item
+  \added{\tcode{\libconcept{copyable}<T>} is \tcode{false},
+  or \tcode{T} has \bigoh{1} copy assignment.}
+\end{itemize}
 
 \pnum
 \begin{example}
-Examples of \tcode{View}s are:
+Examples of \libconcept{view}s are:
 
 \begin{itemize}
-\item A \libconcept{Range} type that wraps a pair of iterators.
+\item A \libconcept{range} type that wraps a pair of iterators.
 
-\item A \libconcept{Range} type that holds its elements by \tcode{shared_ptr}
+\item A \libconcept{range} type that holds its elements by \tcode{shared_ptr}
 and shares ownership with all its copies.
 
-\item A \libconcept{Range} type that generates its elements on demand.
+\item A \libconcept{range} type that generates its elements on demand.
 \end{itemize}
 
 Most containers\cxxiref{containers} are not views since
 \changed{copying}{destruction of} the container \changed{copies}{destroys} the
 elements, which cannot be done in constant time.
 \end{example}
-
-\indexlibrary{\idxcode{enable_view}}%
-\indexlibrary{\idxcode{View}}%
-\begin{itemdecl}
-template<class T>
-  inline constexpr bool enable_view = @\seebelow@;
-
-template<class T>
-  concept View =
-    Range<T> && Semiregular<T> && enable_view<T>;
-\end{itemdecl}
-
-\begin{codeblock}
-template<class T>
-  concept View =
-    Range<T> && @\changed{Semiregular<T>}{Movable<T> \&\& DefaultConstructible<T>}@ && enable_view<T>;
-\end{codeblock}
 \end{quote}
 
 Change \cxxref{range.filter.view} as follows:
 \begin{quote}
 \begin{codeblock}
 namespace std::ranges {
-  template<InputRange V, IndirectUnaryPredicate<iterator_t<V>> Pred>
-    requires View<V> && is_object_v<Pred>
+  template<input_range V, indirect_unary_predicate<iterator_t<V>> Pred>
+    requires view<V> && is_object_v<Pred>
   class filter_view : public view_interface<filter_view<V, Pred>> {
     [...]
     constexpr filter_view(R&& r, Pred pred);
 
-    constexpr V base() const @\added{requires CopyConstructible<V> \{ return base_}; \added{\}}@
+    constexpr V base() const@\added{\& requires copy_constructible<V> \{ return base_}; \added{\}}@
     @\added{constexpr V base() \&\& \{ return std::move(base_); \}}@
 
     constexpr iterator begin();
@@ -358,35 +375,38 @@ namespace std::ranges {
 \setcounter{Paras}{2}
 \begin{removedblock}
 \begin{itemdecl}
-constexpr V base() const;
+@\removed{constexpr V base() const;}@
 \end{itemdecl}
 
 \begin{itemdescr}
 \pnum
-\effects Equivalent to: \tcode{return base_;}
+\removed{\effects Equivalent to: \tcode{return base_;}}
 \end{itemdescr}
 \end{removedblock}
 \end{quote}
 Change \cxxref{range.transform.view}, \cxxref{range.take.view},
 \cxxref{range.common.view}, and \cxxref{range.reverse.view} similarly.
 
-Change \cxxref{range.join.view} as follows \begin{note} This is a drive-by fix
+Change \cxxref{range.join.view} as follows: \begin{note} This is a drive-by fix
 to add \tcode{base} which was unintentionally omitted from \tcode{join_view} and
-\tcode{split_view} in P0896R4.\end{note}:
+\tcode{split_view} in P0896R4.\end{note}
+\begin{note}
+This wording supercedes the resolution of LWG 3322.
+\end{note}
 \begin{quote}
 \begin{codeblock}
 namespace std::ranges {
-  template<InputRange V>
-    requires View<V> && InputRange<iter_reference_t<iterator_t<V>>> &&
+  template<input_range V>
+    requires view<V> && input_range<iter_reference_t<iterator_t<V>>> &&
              (is_reference_v<iter_reference_t<iterator_t<V>>> ||
-              View<iter_value_t<iterator_t<V>>>)
+              view<iter_value_t<iterator_t<V>>>)
   class join_view : public view_interface<join_view<V>> {
     [...]
-    template<InputRange R>
-      requires ViewableRange<R> && Constructible<V, all_view<R>>
+    template<input_range R>
+      requires viewable_range<R> && constructible_from<V, all_view<R>>
     constexpr explicit join_view(R&& r);
 
-    @\added{constexpr V base() const requires CopyConstructible<V> \{ return base_; \}}@
+    @\added{constexpr V base() const \& requires copy_constructible<V> \{ return base_; \}}@
     @\added{constexpr V base() \&\& \{ return std::move(base_); \}}@
 
     constexpr auto begin() {
@@ -397,17 +417,15 @@ namespace std::ranges {
 Add the same definitions to \cxxref{range.split.view} before the first
 definition of \tcode{begin}.
 
-Change \cxxref{range.join.iterator}/6 as follows \begin{note} Yes, I claimed above
-that ``none of the adaptors copy a view in their normal operation'' despite that
-this is an occurrence of exactly that which should properly be a move. Sue me.\end{note}
+Change \cxxref{range.join.iterator}/5 as follows:
 \begin{note} This includes a drive-by simplification of a return type from
 \tcode{decltype(auto)} to \tcode{auto\&} to clarify that \tcode{update_inner}
-always returns an lvalue.\end{note}:
+always returns an lvalue.\end{note}
 \begin{quote}
 \begin{codeblock}
-auto update_inner = [this](iter_reference_t<iterator_t<Base>> x) -> @\changed{decltype(auto)}{auto\&}@ {
+auto update_inner = [this](range_reference_t<Base> x) -> @\changed{decltype(auto)}{auto\&}@ {
   if constexpr (ref_is_glvalue) // \tcode{x} is a reference
-    return (x);                 // \tcode{(x)} is an lvalue
+    return @\removed{(}@x@\removed{)}@; @\removed{// \tcode{(x)} is an lvalue}@
   else
     return (parent_->inner_ = view::all(@\added{std::move(}@x@\added{)}@));
 };
@@ -417,5 +435,3 @@ for (; outer_ != ranges::end(parent_->base_); ++outer_) {
   [...]
 \end{codeblock}
 \end{quote}
-
-%% TODO: implement `move_only_view` in range-v3 and cmcstl2 for validation.
