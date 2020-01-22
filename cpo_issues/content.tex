@@ -128,9 +128,9 @@ P1870R1 also modified the design of
 \tcode{begin}, \tcode{end}, \tcode{rbegin}, and \tcode{rend}:
 these CPOs now only perform lookup and dispatch
 with lvalues bound to their argument expression.
-For example, \tcode{std::ranges::begin(std::span{some_array_argument})} binds
+For example, \tcode{std::ranges::begin(std::span\{some_array_argument\})} binds
 a reference we'll call \tcode{t} to the result of materializing
-the prvalue \tcode{std::span{some_array_argument}},
+the prvalue \tcode{std::span\{some_array_argument\}},
 determines that \tcode{t.begin()} is a valid expression
 whose decayed type models \tcode{input_or_output_iterator},
 and then returns \tcode{t.begin()}.
