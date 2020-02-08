@@ -1,0 +1,43 @@
+% Define section from the C++ standard that can be indexed
+% using its dotted identifer. That is:
+%
+%  \cxxsec{basic.def.odr}{6.2}
+%
+% This is used to make references to sections of the C++ Standard
+% that are not labeled within this document.
+\newcommand{\cxxsec}[2]{%
+  \expandafter\def\csname #1 \endcsname{#2}%
+}
+
+% Generate a reference to the section with the given id. This
+% expands to the full chapter/section/subsection number declared
+% by \cxxsec. For example:
+%
+%  \cxxref{basic.def.odr}
+%
+% Expands to the string 3.2.
+\newcommand{\stdcxxref}[1]{%
+  \href{http://eel.is/c++draft/#1}{[#1]}%
+}
+
+\newcommand{\cxxref}[1]{%
+  \stdcxxref{#1}%
+}
+
+% Generate a reference to the section with the given id, enclosed within
+% parentheses, before which linebreaking is inhibited.
+\newcommand{\cxxiref}[1]{\nolinebreak[3] (\cxxref{#1})}
+
+\cxxsec{basic.compound}{6.8.2}
+
+\cxxsec{customization.point.object}{16.4.2.2.6}
+
+\cxxsec{iterator.synopsis}{23.2}
+\cxxsec{iterator.concept.winc}{23.3.4.4}
+\cxxsec{iterator.concept.sizedsentinel}{23.3.4.8}
+\cxxsec{iterator.concept.bidir}{23.3.4.12}
+
+\cxxsec{ranges}{24}
+\cxxsec{ranges.syn}{24.2}
+\cxxsec{range.sized}{24.4.3}
+\cxxsec{range.subrange}{24.5.3}
