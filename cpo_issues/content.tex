@@ -19,6 +19,9 @@
 
 \vspace{0.5cm}
 
+%% TODO:
+% * Drop the "can"
+
 \chapter{Abstract}
 
 This paper began as a Proposed Resolution
@@ -216,7 +219,7 @@ object\cxxiref{customization.point.object}.
 Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
 \tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
 \added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
+the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
 
 \begin{itemize}
 \item
@@ -231,7 +234,7 @@ the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
   \tcode{ranges::begin(E)} is ill-formed with no diagnostic required.}
 
 \item
-  \changed{\tcode{t + 0} if \tcode{t} is of}{If \tcode{T} is an} array type\removed{\cxxiref{basic.compound}}\added{,
+  \changed{\tcode{t + 0} if \tcode{t} is of}{Otherwise, if \tcode{T} is an} array type\removed{\cxxiref{basic.compound}}\added{,
   \tcode{ranges::begin(E)} is expression-equivalent to \tcode{t + 0}}.
 
 \item
@@ -255,7 +258,7 @@ the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
 \end{codeblock}
   \removed{and does not include a declaration of \tcode{ranges::begin}}
   \added{then \tcode{ranges::begin(E)} is expression-equivalent
-  to \tcode{\placeholdernc{decay-copy}(begin(t))}}.
+  to \tcode{\placeholdernc{decay-copy}(begin(t))} with overload resolution performed in the above context}.
 
 \item
   Otherwise, \tcode{ranges::begin(E)} is ill-formed.
@@ -263,7 +266,7 @@ the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
 
 \pnum
 \begin{note}
-\changed{This case}{Diagnosable ill-formed cases above} can result in
+\changed{This case can}{Diagnosable ill-formed cases above} result in
 substitution failure when \tcode{ranges::begin(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
@@ -283,7 +286,7 @@ object\cxxiref{customization.point.object}.
 Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
 \tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
 \added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
+the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
 
 \begin{itemize}
 \item
@@ -323,7 +326,7 @@ sentinel_for<@\changed{decltype(ranges::begin(E))}{iterator_t<T>}@>
 sentinel_for<@\changed{decltype(ranges::begin(E))}{iterator_t<T>}@>
 \end{codeblock}
   with overload
-  resolution performed in a context \changed{that includes}{in which unqualified lookup for \tcode{end} finds only} the declarations:
+  resolution performed in a context \changed{that includes}{in which unqualified lookup for \tcode{end} finds only} the declarations\removed{:}
 \begin{codeblock}
 @\removed{template<class T> void end(T\&\&) = delete;}@
 @\removed{template<class T> void end(initializer_list<T>\&\&) = delete;}@
@@ -331,7 +334,7 @@ sentinel_for<@\changed{decltype(ranges::begin(E))}{iterator_t<T>}@>
 @\added{void end(const auto\&) = delete;}@
 \end{codeblock}
   \removed{and does not include a declaration of \tcode{ranges::end}}
-  \added{then \tcode{ranges::end(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(end(t))}}.
+  \added{then \tcode{ranges::end(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(end(t))} with overload resolution performed in the above context}.
 
 \item
   Otherwise, \tcode{ranges::end(E)} is ill-formed.
@@ -339,8 +342,8 @@ sentinel_for<@\changed{decltype(ranges::begin(E))}{iterator_t<T>}@>
 
 \pnum
 \begin{note}
-\changed{This case}{Diagnosable ill-formed cases above}
-can result in substitution failure when \tcode{ranges::end(E)}
+\changed{This case can}{Diagnosable ill-formed cases above}
+result in substitution failure when \tcode{ranges::end(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
 
@@ -364,7 +367,7 @@ object\cxxiref{customization.point.object}.
 Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
 \tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
 \added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
+the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
 
 \begin{itemize}
 \item
@@ -397,7 +400,7 @@ the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
 @\added{void rbegin(const auto\&) = delete;}@
 \end{codeblock}
   \removed{and does not include a declaration of \tcode{ranges::rbegin}}
-  \added{then \tcode{ranges::rbegin(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(rbegin(t))}}.
+  \added{then \tcode{ranges::rbegin(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(rbegin(t))} with overload resolution performed in the above context}.
 
 \item
   Otherwise, \tcode{\removed{make_reverse_iterator(ranges::end(t))}} if both
@@ -412,8 +415,8 @@ the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
 
 \pnum
 \begin{note}
-\changed{This case}{Diagnosable ill-formed cases above}
-can result in substitution failure when \tcode{ranges::rbegin(E)}
+\changed{This case can}{Diagnosable ill-formed cases above}
+ result in substitution failure when \tcode{ranges::rbegin(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
 
@@ -432,7 +435,7 @@ object\cxxiref{customization.point.object}.
 Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
 \tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
 \added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
+the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
 
 \begin{itemize}
 \item
@@ -470,7 +473,7 @@ sentinel_for<decltype(ranges::rbegin(E))>
 @\added{void rend(const auto\&) = delete;}@
 \end{codeblock}
   \removed{and does not include a declaration of \tcode{ranges::rend}}
-  \added{then \tcode{ranges::rbegin(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(rend(t))}}.
+  \added{then \tcode{ranges::rbegin(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(rend(t))} with overload resolution performed in the above context}.
 
 \item
   Otherwise, \tcode{\removed{make_reverse_iterator(ranges::begin(t))}} if both
@@ -485,8 +488,8 @@ sentinel_for<decltype(ranges::rbegin(E))>
 
 \pnum
 \begin{note}
-\changed{This case}{Diagnosable ill-formed cases above}
-can result in substitution failure when \tcode{ranges::rend(E)}
+\changed{This case can}{Diagnosable ill-formed cases above}
+result in substitution failure when \tcode{ranges::rend(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
 
@@ -507,7 +510,7 @@ object\cxxiref{customization.point.object}.
 
 \pnum
 \changed{The expression \tcode{ranges::size(E)} for some}{Given a} subexpression \tcode{E} with type
-\tcode{T} \changed{is expression-equivalent to:}{, let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
+\tcode{T} \changed{is expression-equivalent to:}{, let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
 
 \begin{itemize}
 \item
@@ -535,7 +538,7 @@ object\cxxiref{customization.point.object}.
 \item
   Otherwise, \removed{\tcode{\placeholdernc{decay-copy}(size(E))}} if \removed{it}
   \added{\tcode{T} is a class or enumeration type,
-  }\tcode{\added{disable_sized_range<remove_cv_t<T>>}}\added{is \tcode{false},
+  }\tcode{\added{disable_sized_range<remove_cv_t<T>>}}\added{ is \tcode{false},
   and }\tcode{\added{\placeholdernc{decay-copy}(size(t))}} is
   a valid expression \changed{and its}{of integer-like} type \removed{\tcode{I}
   is integer-like} with overload resolution performed in a context
@@ -548,7 +551,7 @@ object\cxxiref{customization.point.object}.
 \end{codeblock}
   \removed{and does not include a declaration of \tcode{ranges::size}}
   \added{then \tcode{ranges::size(E)} is expression-equivalent
-  to \tcode{\placeholdernc{decay-copy}(size(E))}}.
+  to \tcode{\placeholdernc{decay-copy}(size(E))} with overload resolution performed in the above context}.
 
 \item
   Otherwise, \added{if} \tcode{\placeholdernc{make-unsigned-like}(ranges::end(\changed{E}{t}) - ranges::begin(\changed{E}{t}))}~(\changed{\cxxref{range.subrange}}{\cxxref{range.syn}})
@@ -567,8 +570,8 @@ object\cxxiref{customization.point.object}.
 
 \pnum
 \begin{note}
-\changed{This case}{Ill-formed cases above}
-can result in substitution failure when \tcode{ranges::size(E)}
+\changed{This case can}{Ill-formed cases above}
+result in substitution failure when \tcode{ranges::size(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
 
@@ -585,7 +588,7 @@ object\cxxiref{customization.point.object}.
 
 \pnum
 \changed{The expression \tcode{ranges::empty(E)} for some}{Given a} subexpression \tcode{E}
-\changed{is expression-equivalent to:}{with type \tcode{T}, let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
+\changed{is expression-equivalent to:}{with type \tcode{T}, let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
 
 \begin{itemize}
 \item
@@ -614,8 +617,8 @@ object\cxxiref{customization.point.object}.
 
 \pnum
 \begin{note}
-\changed{This case}{Ill-formed cases above}
-can result in substitution failure when \tcode{ranges::empty(E)}
+\changed{This case can}{Ill-formed cases above}
+result in substitution failure when \tcode{ranges::empty(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
 
@@ -632,7 +635,7 @@ The name \tcode{\added{ranges::}data} denotes a customization point object\cxxir
 \pnum
 \changed{The expression \tcode{ranges::data(E)} for some}{Given a} subexpression \tcode{E}
 \changed{is expression-equivalent to:}{with type \tcode{T},
-let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then}
+let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
 
 \begin{itemize}
 \item
@@ -662,8 +665,8 @@ let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E
 
 \pnum
 \begin{note}
-\changed{This case}{Ill-formed cases above}
-can result in substitution failure when \tcode{ranges::data(E)}
+\changed{This case can}{Ill-formed cases above}
+result in substitution failure when \tcode{ranges::data(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
 
