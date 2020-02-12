@@ -19,9 +19,6 @@
 
 \vspace{0.5cm}
 
-%% TODO:
-% * Drop the "can"
-
 \chapter{Abstract}
 
 This paper began as a Proposed Resolution
@@ -30,12 +27,6 @@ and grew to cover several problems with the range access customization point obj
 Each problem is small enough to be addressed by an LWG issue,
 but as they are closely related (if not intertwined)
 it seems best to process them as a unit.
-
-%% \section{Revision History}
-%% \subsection{Revision 0}
-%% \begin{itemize}
-%% \item Almost certainly the only revision. What could go wrong?
-%% \end{itemize}
 
 \chapter{Discussion}
 
@@ -570,7 +561,7 @@ object\cxxiref{customization.point.object}.
 
 \pnum
 \begin{note}
-\changed{This case can}{Ill-formed cases above}
+\changed{This case can}{Diagnosable ill-formed cases above}
 result in substitution failure when \tcode{ranges::size(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
@@ -592,8 +583,8 @@ object\cxxiref{customization.point.object}.
 
 \begin{itemize}
 \item
-  \added{If \tcode{T} is an array type\cxxiref{basic.compound},
-  \tcode{ranges::empty(E)} is expression-equivalent to \tcode{false}.}
+  \added{If \tcode{T} is an array of unknown bound\cxxiref{basic.compound},
+  \tcode{ranges::empty(E)} is ill-formed.}
 
 \item
   \added{Otherwise, if} \tcode{bool(\changed{(E)}{t}.empty())} \removed{if it} is a valid expression\added{,
@@ -617,7 +608,7 @@ object\cxxiref{customization.point.object}.
 
 \pnum
 \begin{note}
-\changed{This case can}{Ill-formed cases above}
+\changed{This case can}{Diagnosable ill-formed cases above}
 result in substitution failure when \tcode{ranges::empty(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
@@ -665,7 +656,7 @@ let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E
 
 \pnum
 \begin{note}
-\changed{This case can}{Ill-formed cases above}
+\changed{This case can}{Diagnosable ill-formed cases above}
 result in substitution failure when \tcode{ranges::data(E)}
 appears in the immediate context of a template instantiation.
 \end{note}
