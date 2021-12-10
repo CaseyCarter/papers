@@ -369,14 +369,15 @@ template<class T>
   public:
     lazy(lazy&& that) noexcept;
     ~lazy();
-    \unspec operator co_await() &;  // \expos
-    \unspec operator co_await() &&; // \expos
+    @\unspec@ operator co_await() &;
+    @\unspec@ operator co_await() &&;
   };
 \end{codeblock}
 
 \pnum
 The library provides specializations of \tcode{coroutine_traits}
-as required to implement the following behaviors.
+and implements \tcode{lazy}'s member overloads of \tcode{operator co_await}
+as necessary to provide the following behaviors.
 
 \pnum
 A call to a lazy coroutine \tcode{f} shall return a lazy object \tcode{t} associated with that coroutine. The called coroutine shall be suspended at the initial suspend point\cxxiref{dcl.fct.def.coroutine}. Such a lazy object is considered to be in the armed state.
@@ -394,7 +395,7 @@ If the eventual type of a coroutine \tcode{f} is \tcode{void} and the coroutine 
 If the eventual type of a coroutine \tcode{f} is not \tcode{void} and the coroutine completes due to an execution of a coroutine return statement\cxxiref{stmt.return.coroutine}, the operand of the coroutine return statement shall be stored in the coroutine state and the awaiting coroutine \tcode{a} is resumed and an expression \tcode{sa.await_resume()} shall return the stored value if \tcode{t} is an rvalue or reference to a stored value, otherwise.
 
 \pnum
-If in the definition of the coroutine g, the first parameter has type \tcode{allocator_arg_t}, then the coroutine shall have at least two arguments and the type of the second parameter shall satisfy the \oldconcept{Allocator} requirements\cxxiref{allocator.requirements.general} and if dynamic allocation is required to store the coroutine state\cxxiref{dcl.fct.def.coroutine}, implementation shall use the provided allocator to allocate and deallocate the coroutine state.
+If in the definition of the coroutine \tcode{g}, the first parameter has type \tcode{allocator_arg_t}, then the coroutine shall have at least two arguments and the type of the second parameter shall satisfy the \oldconcept{Allocator} requirements\cxxiref{allocator.requirements.general} and if dynamic allocation is required to store the coroutine state\cxxiref{dcl.fct.def.coroutine}, implementation shall use the provided allocator to allocate and deallocate the coroutine state.
 
 \pnum
 If a \grammarterm{yield-expression}\cxxiref{expr.yield} occurs
