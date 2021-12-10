@@ -52,7 +52,7 @@ std::lazy<void> modify_record() {
 The interface of lazy is intentionally minimal and designed for efficiency. In fact, the only operation you can do with the lazy is to await on it.
 
 \begin{codeblock}
-template <class T>
+template<class T>
 class [[nodiscard]] lazy {
 public:
   lazy(lazy&& that) noexcept;
@@ -135,7 +135,7 @@ lazy<Y> f() {
   // ...
 }
 \end{codeblock}
-The caller coroutine \tcode{f} owns the lazy object for \tcode{g} that is created and destroyed at the end of the full expression containing \tcode{co_await}. This allows the compiler to determine the lifetime of the coroutine and apply Heap Allocation eLision Optimization~\cite{p0981r0}, which allocates a coroutine's state as if it were a local variable in its caller.
+The caller coroutine \tcode{f} owns the lazy object for \tcode{g} that is created and destroyed at the end of the full expression containing \tcode{co_await}. This allows the compiler to determine the lifetime of the coroutine and apply Heap Allocation eLision Optimization~\cite{P0981R0}, which allocates a coroutine's state as if it were a local variable in its caller.
 
 \subsubsection{Removing \tcode{future} overhead: Reference counting}
 
@@ -156,655 +156,272 @@ while (int v = co_await async_read())
 \end{codeblock}
 Let's say that \tcode{async_read} returns a \tcode{future}. That \tcode{future} cannot resume directly the coroutine that is awaiting on it as it will, in effect, transform the loop into unbounded recursion.
 
-On the other hand, coroutines have built-in support for symmetric coroutine transfer~\cite{p0913r1}. Since \tcode{lazy} object can only be created by a coroutine and the only way to get the result from a coroutine is by awaiting on it from another coroutine, the transfer of control from completing coroutine to awaiting coroutine is done in symmetric fashion, thus eliminating the need for extra scheduling interactions.
+On the other hand, coroutines have built-in support for symmetric coroutine transfer~\cite{P0913R1}. Since \tcode{lazy} object can only be created by a coroutine and the only way to get the result from a coroutine is by awaiting on it from another coroutine, the transfer of control from completing coroutine to awaiting coroutine is done in symmetric fashion, thus eliminating the need for extra scheduling interactions.
 
 \subsection{Destruction and cancellation}
 Note that the \tcode{lazy} type unconditionally destroys the coroutine in its destructor. It is safe to do, only if the coroutine has finished execution (at the final suspend point) or it is in a suspended state (waiting for some operation to complete), but, somehow, we know that the coroutine will never be resumed by the entity which was supposed to resume the coroutine on behalf of the operation that coroutine is awaiting upon. That is only possible if the underlying asynchronous facility support cancellation.
 
-We strongly believe that support for cancellation is a required facility for writing asynchronous code and we struggled for awhile trying to decide what is the source of the cancellation, whether it is the \tcode{lazy} that must initiate cancellation - and therefore every await in every coroutine needs to understand how to cancel a particular operation it is being awaited upon - or every async operation is tied to a particular lifetime and cancellation domain and operations are cancelled in bulk by cancellation of the entire cancellation domain~\cite{p0399r0}.
+We strongly believe that support for cancellation is a required facility for writing asynchronous code and we struggled for awhile trying to decide what is the source of the cancellation, whether it is the \tcode{lazy} that must initiate cancellation - and therefore every await in every coroutine needs to understand how to cancel a particular operation it is being awaited upon - or every async operation is tied to a particular lifetime and cancellation domain and operations are cancelled in bulk by cancellation of the entire cancellation domain~\cite{P0399R0}.
 
 We experimented with both approaches and reached the conclusion that not performing cancellation from the \tcode{lazy}, but, pushing it to the cancellation domain leads to more efficient implementation and is a simpler model for users.
 
+\subsection{Why no move assignment?}
 
+This is rather unorthodox decision and even authors of the paper did not completely agree on this topic. However, going with more restrictive model initially allows us to discover if the insight that lead to this decision was wrong. Initial design of the lazy, included move assignment, default constructor and swap. We removed them for two reasons.
 
+First, when observing how lazy was used, we noticed that whenever, a variable-size container of tasks was created, we later realized that it was a suboptimal choice and a better solution did not require a container of tasks.
 
+Second: move-assignment of a lazy is a ticking bomb. To make it safe, we would need to introduce per lazy cancellation of associated coroutines and it is a very heavy-weight solution.
 
+At the moment we do not offer a move assignment, default constructor and swap. If good use cases, for which there are no better ways to solve the same problem are discovered, we can add them.
 
-\chapter{Discussion}
+\subsection{Interaction with allocators}
 
-The following largely omits discussion of the constant variations of the range access CPOs
-\tcode{cbegin}, \tcode{cend}, \tcode{crbegin}, \tcode{crend}, and \tcode{cdata}
-for brevity despite that the arguments presented for each CPO apply similarly
-to its corresponding constant variation.
-Imagine that occurrences of e.g. ``\tcode{begin}'' below
-are instead occurrences of ``\tcode{begin} (and \tcode{cbegin}).''
+The implementation of coroutine bindings for lazy is required to treat the case where first parameter to a coroutine is of type \tcode{allocator_arg_t}. If that is the case, the coroutine needs to have at least two arguments and the second one shall satisfy the \oldconcept{Allocator} requirements and if dynamic allocation required to store the coroutine state, implementation should use provided allocator to allocate and deallocate the coroutine state. Examples:
+\begin{codeblock}
+lazy<int> f(int, float); // uses default allocator if needed
 
-\section{arrays of unknown bound}
-GB275 states (\cite{GB275}):
-\begin{quote}
-\tcode{ranges::begin} and \tcode{ranges::end} should not accept arrays of unknown bound.
-The current definitions of \tcode{ranges::begin} and \tcode{ranges::end}
-mean that an array of unknown bound is treated as an empty range.
-The expressions \tcode{E + 0} and \tcode{E + extent_v<T>} are both well-formed
-for [an expression \tcode{E} with type \tcode{T} which is] an array of unknown bound
-(with \tcode{extent_v<T>} equal to zero).
+lazy<int> f(allocator_arg_t, pmr::polymorphic_allocator<> a); // uses a to allocate, if needed
 
-Proposed change: \\
-Make \tcode{ranges::begin(E)} and \tcode{ranges::end(E)} ill-formed
-when \tcode{E} is an array of unknown bound.
-\end{quote}
+template<class Alloc>
+lazy<int> f(allocator_arg_t, Alloc a); // uses allocator a to allocate. if needed
+\end{codeblock}
 
-In private communication before Belfast,
-the author and Jonathan Wakely discussed arrays of unknown bound
-and their interactions with the range access CPOs extensively
-and came to the conclusion that
-\tcode{begin} and \tcode{data} should accept them
-to preserve the reasonable behavior of \tcode{std::begin} and \tcode{std::data},
-but \tcode{end} and \tcode{size} should not.
-It seems logical to relax the \libconcept{range} constraint on \tcode{ranges::iterator_t} as well,
-so it can continue to express ``the type that \tcode{ranges::begin} returns''
-even in this non-\libconcept{range} case.
+\subsection{Interaction with executors}
+Since coroutine starts suspended, it is up to the user to decide how it needs to get executed and where continuation needs to be scheduled.
 
-\tcode{empty} is also easily supported
-despite the lack of extent
-since arrays cannot have zero extent.
+Case 1: Starts in the current thread, resumes in the thread that triggered the completion of \tcode{f()}.
+\begin{codeblock}
+co_await f();
+\end{codeblock}
 
+Case 2: Starts in the current thread, resumes on executor \tcode{ex}.
+\begin{codeblock}
+co_await f().via(ex);
+\end{codeblock}
+\begin{note}
+Member function via is not part of the lazy at the moment. We envision this as one possible way of how to express the desire to execute continuation in a different executor. For more details see P0975R0 that explores impact of coroutines on various existing proposals in flight~\cite{P0975R0}.
+\end{note}
 
-\section{arrays of elements with incomplete type}
+Case 3: Starts by an executor \tcode{ex}, resumes in the thread that triggered the completion of \tcode{f()}.
+\begin{codeblock}
+co_await spawn(ex, f());
+\end{codeblock}
 
-The author and Mr. Wakely also discussed
-how the range access CPOs should handle
-arrays whose elements have incomplete type.
-Such array types were never considered during the evolution of Ranges,
-so any status quo behavior is unintended.
+Case 4: Starts by an executor \tcode{ex1}, resumes on executor \tcode{ex2}.
+\begin{codeblock}
+co_await spawn(ex1, f()).via(ex2);
+\end{codeblock}
 
-\tcode{size} and \tcode{empty} make sense for these arrays since we can determine the extent.
-\tcode{begin} and \tcode{data} could be made to work,
-but would nonetheless likely produce problems elsewhere in the program since
-pointers-to-incomplete-type fail to satisfy \libconcept{weakly_incrementable}
-and therefore all of the iterator concepts including notably \libconcept{contiguous_iterator}.
-Supporting arrays of incomplete type in the other CPOs seems like a recipe for disaster:
-pointer arithmetic doesn't work, and given that the element type may be completed, we're skirting the ODR.
-Factoring in the instability around memoization of concepts (See GB046 \cite{GB046}),
-we should avoid attempting to support these types in other CPOs for now.
+The last case is only needed if \tcode{f()} cannot start executing in the current thread for some reason. We expect that this will not be a common case. Usually, when a coroutine has unusual requirements on where it needs to be executed it can be encoded directly in \tcode{f} without forcing the callers of \tcode{f} to do extra work. Typically, in this manner:
+\begin{codeblock}
+lazy<T> f() {
+  co_await make_sure_I_am_on_the_right_thread();
+  // ...
+}
+\end{codeblock}
 
+\subsection{But what about \tcode{main}?}
+As we mentioned in the beginning, the only operation that one can do on a lazy is to await on it (as if by \tcode{co_await} operator). Using an \grammarterm{await-expression} in a function turns it into a coroutine. But, this cannot go on forever, at some point, we have to interact with coroutine from a function that is not a coroutine itself, \tcode{main}, for example. What to do?
 
-\section{\libconcept{safe_range}s and \tcode{ranges::data}}
+There could be several functions that can bridge the gap between synchronous and asynchronous world. For example:
+\begin{codeblock}
+template<class T> T sync_await(lazy<T>);
+\end{codeblock}
+This function starts the lazy execution in the current thread, and, if it gets suspended, it blocks until the result is available. To simplify the signature, we show \tcode{sync_await} only taking objects of lazy type. This function can be written generically to handle arbitrary awaitables.
 
-\tcode{ranges::begin} avoids returning dangling iterators
-with the ``lvalue or \libconcept{safe_range}'' test,
-but \tcode{ranges::data} happily returns dangling pointers for rvalue non-\libconcept{safe_range}s.
-There's no particular reason for this, other than the fact that
-P0970R1 ``Better, Safer Range Access Customization Points'' \cite{p0970r1} and
-P0944 ``Contiguous Ranges'' \cite{p0944r0}
-were processed at the same time and never reconciled.
-This seems like an oversight we can easily correct now
-by requiring ``lvalue or \libconcept{safe_range}'' arguments
-in \tcode{ranges::data} just as we already do for \tcode{ranges::begin}.
+Another function could be a variant of \tcode{std::async} that launches execution of a lazy on a thread pool and returns a future representing the result of the computation.
+\begin{codeblock}
+template<class T> T async(lazy<T>);
+\end{codeblock}
+One would use this version of \tcode{std::async} if blocking behavior of \tcode{sync_await} is undesirable.
 
+\subsection{Implementation experience}
 
-\section{LWG-3258 and poison pills}
+A version of proposed type has been used in shipping software that runs on hundreds of million devices in consumer hands. Also, a similar type has been implemented in most extensive coroutine abstraction library CppCoro~\cite{CppCoro}. This proposed type is minimal and efficient and can be used to build higher level abstraction by composition.
 
-LWG-3258 ``Range access and \tcode{initializer_list}'' \cite{lwg3258}
-proposes a change to the \tcode{initializer_list} poison pills
-for \tcode{begin} and \tcode{end}, and
-the addition of similar poison pills to \tcode{rbegin} and \tcode{rend}.
-This was a great idea, until
-P1870R1 ``\tcode{\placeholdernc{forwarding-range}<T>} is too subtle'' \cite{p1870r1},
-changed the opt-in mechanism for \tcode{\placeholdernc{forwarding-range}<T>}
-(now \libconcept{safe_range}) from ``do rvalues work?''
-to ``is this trait specialized?''.
-We could and should have removed the \tcode{initializer_list} poison pills
-in P1870R1, but did not - so let's do so now.
+\chapter{Wording}
 
-
-\section{P1870 and the advantages of lvalue dispatch}
-
-P1870R1 also modified the design of
-\tcode{begin}, \tcode{end}, \tcode{rbegin}, and \tcode{rend}:
-these CPOs now only perform lookup and dispatch
-with lvalues bound to their argument expression.
-For example, \tcode{std::ranges::begin(std::span\{some_array_argument\})} binds
-a reference we'll call \tcode{t} to the result of materializing
-the prvalue \tcode{std::span\{some_array_argument\}},
-determines that \tcode{t.begin()} is a valid expression
-whose decayed type models \tcode{input_or_output_iterator},
-and then returns \tcode{t.begin()}.
-Always performing lookup and dispatch with lvalues in this fashion
-makes it easier to reason about, implement, and specify the CPOs.
-We should specify the others similarly.
-
-While implementing this change,
-I realized that the forwarding-reference poison pills in the working draft
-are insufficiently poisonous.
-\tcode{void foo(auto\&\&)} is less-specialized than either
-\tcode{void foo(auto\&)} or \tcode{void foo(const auto\&)},
-so a \tcode{void foo(auto\&\&)} poison pill fails to intercept/ambiguate
-calls to such overgeneric lvalue functions as intended.
-We should fix the poison pills by replacing them with two lvalue overloads.
-(I'm not certain the poison pills serve a useful design purpose anymore,
-and I'd like to remove them,
-but it's too late in the cycle for even so small a design change.)
-
-
-\section{ADL only for class/enumeration types}
-
-Just as LWG-3299 doesn't want users to specify non-pointer iterator behaviors
-for pointer-to-program-defined-type (\cite{lwg3299}),
-we don't intend for users to specify
-non-array range behaviors for array-of-program-defined-type.
-It's similarly not intended that users specify range behaviors for functions.
-We should forbid such silliness in the range access CPOS
-just as LWG-3299 does for the iterator machinery
-by constraining ADL cases to expressions of class or enumeration type.
-
-
-\section{Editorial Feedback}
-During the merge of P1870R1, the Project Editor expressed dissatisfaction
-with a couple of phrases used widely in the CPO wording:
-\begin{itemize}
-\item ``an lvalue \tcode{t} that denotes the same object as [subexpression] \tcode{E}''
-  doesn't make sense when \tcode{E} is a prvalue since prvalues don't ``denote an object.''
-  We should instead say that \tcode{T} denotes the result of applying
-  the temporary materialization conversion to \tcode{E} when \tcode{E} is a prvalue.
-\item ``ranges::begin(E) is ill-formed'' is not something
-  to which [an expression] can be expression-equivalent.
-  This category error is repeated in every CPO specification
-  (sometimes twice after application of P1870R1).
-\end{itemize}
-
-
-\chapter{Implementation Experience}
-The proposed changes have been implemented in Microsoft's STL (See https://github.com/microsoft/STL/pull/432).
-
-
-\chapter{Technical Specifications}
 The technical specifications that follow take the form of excerpts
-from the working draft with change markings:
+from the working draft N4901~\cite{N4901} with change markings:
 \begin{itemize}
 \item \removed{Text to be struck is in red with strikethough}, and
 \item \added{text to be added is ``green'' with underline}.
 \end{itemize}
 
-Note that these specifications supersede the proposed resolution of LWG-3258
-and include the proposed resolution of
-LWG-3368 ``Exactly when does \tcode{size} return \tcode{end - begin}?'' \cite{lwg3368}.
+\ednote{Add definitions to the \tcode{<coroutine>} synopsis:}
 
-\setcounter{chapter}{23}
-\rSec0[ranges]{Ranges library}
-[...]
-\setcounter{section}{1}
-\rSec1[ranges.syn]{Header \tcode{<ranges>} synopsis}
-[...]
+\setcounter{chapter}{17}
+\setcounter{section}{12}
+\setcounter{subsection}{1}
+\rSec2[coroutine.syn]{Header \tcode{<coroutine>} synopsis}
+
+\indexheader{coroutine}%
+\indexlibraryglobal{noop_coroutine_handle}%
 \begin{codeblock}
-  template<@\changed{range R}{class T}@>
-    using iterator_t = decltype(ranges::begin(declval<@\changed{R}{T}@&>()));
+#include <compare>              // see \cxxref{compare.syn}
+
+namespace std {
+  [...]
+
+  // \cxxref{coroutine.trivial.awaitables}, trivial awaitables
+  struct suspend_never;
+  struct suspend_always;
+
+  @\added{// \ref{coroutine.awaitable}, awaitable concepts}@
+  @\added{template<class T, class Promise = void>}@
+  @\added{concept simple_awaitable = \seebelownc;}@
+
+  @\added{template<class T, class Promise = void>}@
+  @\added{concept awaitable = \seebelownc;}@
+}
 \end{codeblock}
-[...]
-\rSec1[range.access]{Range access}
-[...]
-\rSec2[range.access.begin]{\tcode{ranges::begin}}
-\pnum
-The name \tcode{ranges::begin} denotes a customization point
-object\cxxiref{customization.point.object}.
+
+\ednote{Insert new subclauses at the end of \cxxref{support.coroutine}:}
+
+{\color{addclr}
+\setcounter{subsection}{6}
+\rSec2[coroutine.awaitable]{Awaitable concepts}
 
 \pnum
-Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
-\tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
-\added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
+The \libconcept{awaitable} and \libconcept{simple_awaitable} concepts
+specify the requirements on a type
+that is usable in an \grammarterm{await-expression}\cxxiref{expr.await}.
 
-\begin{itemize}
-\item
-  \changed{if}{If} \tcode{E} is an rvalue and
-  \tcode{enable_safe_range<\changed{remove_cvref_t<decltype((E))>}{remove_cv_t<T>}>} is \tcode{false},
-  \tcode{ranges::begin(E)} is ill-formed.
-  \removed{Otherwise, \tcode{ranges::begin(E)} is expression-equivalent to:}
+\begin{itemdecl}
+template<class T>
+concept @\exposid{suspend-result}@ = @\seebelownc@; // \expos
 
-\item
-  \added{Otherwise, if \tcode{T} is an array type\cxxiref{basic.compound} and
-  }\tcode{\added{remove_all_extents_t<T>}}\added{ is an incomplete type,
-  \tcode{ranges::begin(E)} is ill-formed with no diagnostic required.}
+template<class T, class Promise = void>
+concept simple_awaitable = requires(T& t, const coroutine_handle<Promise>& h) {
+  { t.await_ready() } -> convertible_to<bool>; // not required to be equality-preserving
+  { t.await_suspend(h) } -> @\exposidnc{suspend-result}@; // not required to be equality-preserving
+  t.await_resume(); // not required to be equality-preserving
+};
 
-\item
-  \changed{\tcode{t + 0} if \tcode{t} is of}{Otherwise, if \tcode{T} is an} array type\removed{\cxxiref{basic.compound}}\added{,
-  \tcode{ranges::begin(E)} is expression-equivalent to \tcode{t + 0}}.
+template<class T, class Promise = void>
+concept @\exposidnc{has-member-co_await}@ = // \expos
+  requires(T&& t) {
+    { std::forward<T>(t).operator co_await() }
+      -> simple_awaitable<Promise>; // not required to be equality-preserving
+  };
 
-\item
-  Otherwise, \added{if} \tcode{\placeholdernc{decay-copy}(t.begin())} \removed{if it}
-  is a valid expression \changed{and its}{whose} type \removed{\tcode{I}}
-  models \libconcept{input_or_output_iterator}\added{,
-  \tcode{ranges::begin(E)} is expression-equivalent
-  to \tcode{\placeholdernc{decay-copy}(t.begin())}}.
+template<class T, class Promise = void>
+concept @\exposidnc{has-ADL-co_await}@ = // \expos
+  requires(T&& t) {
+    { operator co_await(std::forward<T>(t)) }
+      -> simple_awaitable<Promise>; // not required to be equality-preserving
+  };
 
-\item
-  Otherwise, \added{if \tcode{T} is a class or enumeration type and}
-  \tcode{\placeholdernc{decay-copy}(begin(t))} \removed{if it} is a
-  valid expression \changed{and its}{whose} type \removed{\tcode{I}} models
-  \libconcept{input_or_output_iterator} with overload
-  resolution performed in a context \changed{that includes}{in which unqualified lookup for \tcode{begin} finds only} the declarations\removed{:}
+template<class T, class Promise = void>
+concept awaitable = @\exposid{has-member-co_await}@<T, Promise> ||
+  @\exposid{has-ADL-co_await}@<T, Promise> || simple_awaitable<T, Promise>;
+\end{itemdecl}
+
+\begin{itemdescr}
+\pnum
+For a type \tcode{T},
+\tcode{\exposid{suspend-result}<T>} is satisfied
+if \tcode{T} denotes \tcode{void} or \tcode{bool}, or
+if \tcode{T} is a specialization of \tcode{coroutine_handle}.
+
+\pnum
+For an expression $E$,
+if \tcode{decltype(($E$))} satisfies
+the \tcode{\libconcept{awaitable}<P>} concept
+for some promise type \tcode{P},
+then a \term{simple awaitable of $E$} is
+an object satisfying the \tcode{\libconcept{simple_awaitable}<P>} concept
+that is either the result of evaluation of $E$ itself
+or the result of an application (if available)
+of \tcode{operator co_await} to $E$.
+\end{itemdescr}
+
+\rSec2[coroutine.lazy]{Coroutine tasks}
+\rSec3[coroutine.lazy.overview]{Overview}
+\pnum
+This subclause describes components that a program can use
+to create coroutines representing asynchronous computations.
+
+\rSec3[lazy.syn]{Header \tcode{<lazy>} synopsis}
 \begin{codeblock}
-@\removed{template<class T> void begin(T\&\&) = delete;}@
-@\removed{template<class T> void begin(initializer_list<T>\&\&) = delete;}@
-@\added{void begin(auto\&) = delete;}@
-@\added{void begin(const auto\&) = delete;}@
+namespace std {
+  template<class T = void> class lazy;
+  template<class T> class lazy<T&>;
+  template<> class lazy<void>;
+}
 \end{codeblock}
-  \removed{and does not include a declaration of \tcode{ranges::begin}}
-  \added{then \tcode{ranges::begin(E)} is expression-equivalent
-  to \tcode{\placeholdernc{decay-copy}(begin(t))} with overload resolution performed in the above context}.
 
-\item
-  Otherwise, \tcode{ranges::begin(E)} is ill-formed.
-\end{itemize}
-
+\rSec3[coroutine.lazy.type]{Class template \tcode{lazy}}
 \pnum
-\begin{note}
-\changed{This case can}{Diagnosable ill-formed cases above} result in
-substitution failure when \tcode{ranges::begin(E)}
-appears in the immediate context of a template instantiation.
-\end{note}
+The class template \tcode{lazy} defines
+a type for a coroutine lazy object
+that can be associated with
+a coroutine whose return type is
+\tcode{lazy<T>} for some type \tcode{T}.
+This subclause refers to such a coroutine as a lazy coroutine
+and to type \tcode{T} as the eventual type of a lazy coroutine.
 
-\pnum
-\begin{note}
-Whenever \tcode{ranges::begin(E)} is a valid expression, its type models
-\tcode{input_or_output_iterator}.
-\end{note}
-
-\rSec2[range.access.end]{\tcode{ranges::end}}
-\pnum
-The name \tcode{ranges::end} denotes a customization point
-object\cxxiref{customization.point.object}.
-
-\pnum
-Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
-\tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
-\added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
-
-\begin{itemize}
-\item
-  \changed{if}{If} \tcode{E} is an rvalue and
-  \tcode{enable_safe_range<\changed{remove_cvref_t<decltype((E))>}{remove_cv_t<T>}>} is \tcode{false},
-  \tcode{ranges::end(E)} is ill-formed.
-  \removed{Otherwise, \tcode{ranges::end(E)} is expression-equivalent to:}
-
-\item
-  \added{Otherwise, if \tcode{T} is an array type\cxxiref{basic.compound} and
-  }\tcode{\added{remove_all_extents_t<T>}}\added{ is an incomplete type,
-  \tcode{ranges::end(E)} is ill-formed with no diagnostic required.}
-
-\item
-  \added{Otherwise, if \tcode{T} is an array of unknown bound,
-  \tcode{ranges::end(E)} is ill-formed.}
-
-\item
-  \added{Otherwise, if \tcode{T} is an array, \tcode{ranges::end(E)} is expression-equivalent to}
-  \tcode{t + extent_v<T>} \removed{if \tcode{E} is of array type\cxxiref{basic.compound} \tcode{T}}.
-
-\item
-  Otherwise, \added{if}
-  \tcode{\placeholdernc{decay-copy}(t.end())}
-  \removed{if it} is a valid expression \changed{and its}{whose} type \removed{\tcode{S}} models
 \begin{codeblock}
-sentinel_for<@\changed{decltype(ranges::begin(E))}{iterator_t<T>}@>
+template<class T>
+  class [[nodiscard]] lazy {
+  public:
+    lazy(lazy&& that) noexcept;
+    ~lazy();
+    \unspec operator co_await() &;  // \expos
+    \unspec operator co_await() &&; // \expos
+  };
 \end{codeblock}
-  \added{then \tcode{ranges::end(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(t.end())}.}
-
-\item
-  Otherwise, \removed{\tcode{\placeholdernc{decay-copy}(end(t))}} if \removed{it}
-  \added{\tcode{T} is a class or enumeration type and
-  \tcode{\placeholdernc{decay-copy}(end(t))}} is a valid
-  expression \changed{and its}{whose} type \removed{\tcode{S}} models
-\begin{codeblock}
-sentinel_for<@\changed{decltype(ranges::begin(E))}{iterator_t<T>}@>
-\end{codeblock}
-  with overload
-  resolution performed in a context \changed{that includes}{in which unqualified lookup for \tcode{end} finds only} the declarations\removed{:}
-\begin{codeblock}
-@\removed{template<class T> void end(T\&\&) = delete;}@
-@\removed{template<class T> void end(initializer_list<T>\&\&) = delete;}@
-@\added{void end(auto\&) = delete;}@
-@\added{void end(const auto\&) = delete;}@
-\end{codeblock}
-  \removed{and does not include a declaration of \tcode{ranges::end}}
-  \added{then \tcode{ranges::end(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(end(t))} with overload resolution performed in the above context}.
-
-\item
-  Otherwise, \tcode{ranges::end(E)} is ill-formed.
-\end{itemize}
 
 \pnum
-\begin{note}
-\changed{This case can}{Diagnosable ill-formed cases above}
-result in substitution failure when \tcode{ranges::end(E)}
-appears in the immediate context of a template instantiation.
-\end{note}
+The library provides specializations of \tcode{coroutine_traits}
+as required to implement the following behaviors.
 
 \pnum
-\begin{note}
-Whenever \tcode{ranges::end(E)} is a valid expression,
-the types \tcode{S} and \tcode{I} of
-\tcode{ranges::end(E)} and \tcode{ranges::begin(E)}
-model \tcode{\libconcept{sentinel_for}<S, I>}.
-\end{note}
-
-[...]
-
-\setcounter{subsection}{4}
-\rSec2[range.access.rbegin]{\tcode{ranges::rbegin}}
-\pnum
-The name \tcode{ranges::rbegin} denotes a customization point
-object\cxxiref{customization.point.object}.
+A call to a lazy coroutine \tcode{f} shall return a lazy object \tcode{t} associated with that coroutine. The called coroutine shall be suspended at the initial suspend point\cxxiref{dcl.fct.def.coroutine}. Such a lazy object is considered to be in the armed state.
 
 \pnum
-Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
-\tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
-\added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
-
-\begin{itemize}
-\item
-  \changed{if}{If} \tcode{E} is an rvalue and
-  \tcode{enable_safe_range<\changed{remove_cvref_t<decltype((E))>}{remove_cv_t<T>}>} is \tcode{false},
-  \tcode{ranges::rbegin(E)} is ill-formed.
-  \removed{Otherwise, \tcode{ranges::rbegin(E)} is expression-equivalent to:}
-
-\item
-  \added{Otherwise, if \tcode{T} is an array type\cxxiref{basic.compound} and
-  }\tcode{\added{remove_all_extents_t<T>}}\added{ is an incomplete type,
-  \tcode{ranges::rbegin(E)} is ill-formed with no diagnostic required.}
-
-\item
-  \added{Otherwise, if} \tcode{\placeholdernc{decay-copy}(t.rbegin())}
-  \removed{if it} is a valid expression \changed{and its}{whose} type \removed{\tcode{I}} models
-  \libconcept{input_or_output_iterator}\added{,
-  \tcode{ranges::rbegin(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(t.rbegin())}}.
-
-\item
-  Otherwise, \removed{\tcode{\placeholdernc{decay-copy}(rbegin(t))}} if \removed{it}
-  \added{\tcode{T} is a class or enumeration type and
-  \tcode{\placeholdernc{decay-copy}(rbegin(t))}} is a valid
-  expression \changed{and its}{whose} type \removed{\tcode{I}} models
-  \libconcept{input_or_output_iterator} with overload
-  resolution performed in a context \changed{that includes}{in which unqualified lookup for \tcode{rbegin} finds only} the declaration\changed{:}{s}
-\begin{codeblock}
-@\removed{template<class T> void rbegin(T\&\&) = delete;}@
-@\added{void rbegin(auto\&) = delete;}@
-@\added{void rbegin(const auto\&) = delete;}@
-\end{codeblock}
-  \removed{and does not include a declaration of \tcode{ranges::rbegin}}
-  \added{then \tcode{ranges::rbegin(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(rbegin(t))} with overload resolution performed in the above context}.
-
-\item
-  Otherwise, \tcode{\removed{make_reverse_iterator(ranges::end(t))}} if both
-  \tcode{ranges::begin(t)} and \tcode{ranges::end(t)} are valid
-  expressions of the same type \removed{\tcode{I}} which models
-  \libconcept{bidirectional_iterator}\cxxiref{iterator.concept.bidir}\added{,
-  \tcode{ranges::rbegin(E)} is expression-equivalent to }\tcode{\added{make_reverse_iterator(ranges::end(t))}}.
-
-\item
-  Otherwise, \tcode{ranges::rbegin(E)} is ill-formed.
-\end{itemize}
+The type of a lazy object shall satisfy the \libconcept{awaitable} concept, and awaiting on a lazy object in the armed state as if by \tcode{co_await t}\cxxiref{expr.await} shall register the awaiting coroutine \tcode{a} with the lazy object \tcode{t} and resume the coroutine \tcode{f}. At this point \tcode{t} is considered to be in the launched state. Awaiting on a lazy object that is not in the armed state has undefined behavior.
 
 \pnum
-\begin{note}
-\changed{This case can}{Diagnosable ill-formed cases above}
- result in substitution failure when \tcode{ranges::rbegin(E)}
-appears in the immediate context of a template instantiation.
-\end{note}
+Let \tcode{sa} be a simple awaitable of \tcode{t}\iref{coroutine.awaitable}. If the compound-statement of the function-body of the coroutine \tcode{f} completes with an unhandled exception, the awaiting coroutine \tcode{a} is resumed and an expression \tcode{sa.await_resume()} shall rethrow that exception.
 
 \pnum
-\begin{note}
-Whenever \tcode{ranges::rbegin(E)} is a valid expression, its type models
-\libconcept{input_or_output_iterator}.
-\end{note}
-
-\rSec2[range.access.rend]{\tcode{ranges::rend}}
-\pnum
-The name \tcode{ranges::rend} denotes a customization point
-object\cxxiref{customization.point.object}.
+If the eventual type of a coroutine \tcode{f} is \tcode{void} and the coroutine completes due to an execution of a coroutine return statement\cxxiref{stmt.return.coroutine}, or flowing off the end of a coroutine, the awaiting coroutine \tcode{a} is resumed and an expression \tcode{sa.await_resume()} shall evaluate to \tcode{void}.
 
 \pnum
-Given a subexpression \tcode{E} \changed{and an lvalue}{with type \tcode{T}, let}
-\tcode{t} \added{be an lvalue} that denotes the same object as \tcode{E}\removed{,}
-\added{if \tcode{E} is a glvalue and otherwise denotes the result of applying
-the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
-
-\begin{itemize}
-\item
-  \changed{if}{If} \tcode{E} is an rvalue and
-  \tcode{enable_safe_range<\changed{remove_cvref_t<decltype((E))>}{remove_cv_t<T>}>} is \tcode{false},
-  \tcode{ranges::rend(E)} is ill-formed.
-  \removed{Otherwise, \tcode{ranges::rend(E)} is expression-equivalent to:}
-
-\item
-  \added{Otherwise, if \tcode{T} is an array type\cxxiref{basic.compound} and
-  }\tcode{\added{remove_all_extents_t<T>}}\added{ is an incomplete type,
-  \tcode{ranges::rend(E)} is ill-formed with no diagnostic required.}
-
-\item
-  \added{Otherwise, if} \tcode{\placeholdernc{decay-copy}(t.rend())}
-  \removed{if it} is a valid expression \changed{and its}{whose} type \removed{\tcode{S}} models
-\begin{codeblock}
-sentinel_for<decltype(ranges::rbegin(E))>
-\end{codeblock}
-  \added{then \tcode{ranges::rend(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(t.rend())}.}
-
-\item
-  Otherwise, \removed{\tcode{\placeholdernc{decay-copy}(rend(t))}} if \removed{it}
-  \added{\tcode{T} is a class or enumeration type and
-  \tcode{\placeholdernc{decay-copy}(rend(t))}} is a valid
-  expression \changed{and its}{whose} type \removed{\tcode{S}} models
-\begin{codeblock}
-sentinel_for<decltype(ranges::rbegin(E))>
-\end{codeblock}
-  with overload
-  resolution performed in a context \changed{that includes}{in which unqualified lookup for \tcode{rend} finds only} the declaration\changed{:}{s}
-\begin{codeblock}
-@\removed{template<class T> void rend(T\&\&) = delete;}@
-@\added{void rend(auto\&) = delete;}@
-@\added{void rend(const auto\&) = delete;}@
-\end{codeblock}
-  \removed{and does not include a declaration of \tcode{ranges::rend}}
-  \added{then \tcode{ranges::rbegin(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(rend(t))} with overload resolution performed in the above context}.
-
-\item
-  Otherwise, \tcode{\removed{make_reverse_iterator(ranges::begin(t))}} if both
-  \tcode{ranges::begin(t)} and \tcode{ranges::end(t)} are valid
-  expressions of the same type \removed{\tcode{I}} which models
-  \libconcept{bidirectional_iterator}\cxxiref{iterator.concept.bidir}\added{,
-  then \tcode{ranges::rend(E)} is expression-equivalent to }\tcode{\added{make_reverse_iterator(ranges::begin(t))}}.
-
-\item
-  Otherwise, \tcode{ranges::rend(E)} is ill-formed.
-\end{itemize}
+If the eventual type of a coroutine \tcode{f} is not \tcode{void} and the coroutine completes due to an execution of a coroutine return statement\cxxiref{stmt.return.coroutine}, the operand of the coroutine return statement shall be stored in the coroutine state and the awaiting coroutine \tcode{a} is resumed and an expression \tcode{sa.await_resume()} shall return the stored value if \tcode{t} is an rvalue or reference to a stored value, otherwise.
 
 \pnum
-\begin{note}
-\changed{This case can}{Diagnosable ill-formed cases above}
-result in substitution failure when \tcode{ranges::rend(E)}
-appears in the immediate context of a template instantiation.
-\end{note}
+If in the definition of the coroutine g, the first parameter has type \tcode{allocator_arg_t}, then the coroutine shall have at least two arguments and the type of the second parameter shall satisfy the \oldconcept{Allocator} requirements\cxxiref{allocator.requirements.general} and if dynamic allocation is required to store the coroutine state\cxxiref{dcl.fct.def.coroutine}, implementation shall use the provided allocator to allocate and deallocate the coroutine state.
 
 \pnum
-\begin{note}
-Whenever \tcode{ranges::rend(E)} is a valid expression,
-the types \tcode{S} and \tcode{I} of
-\tcode{ranges::rend(E)} and \tcode{ranges::rbegin(E)}
-model \tcode{\libconcept{sentinel_for}<S, I>}.
-\end{note}
+If a \grammarterm{yield-expression}\cxxiref{expr.yield} occurs
+in the suspension context of the lazy coroutine,
+the program is ill-formed.
 
-[...]
-\setcounter{subsection}{8}
-\rSec2[range.prim.size]{\tcode{ranges::size}}
+\rSec3[coroutine.lazy.mem]{Members}
+\begin{itemdecl}
+lazy(lazy&& that) noexcept;
+\end{itemdecl}
+
+\begin{itemdescr}
 \pnum
-The name \tcode{\added{ranges::}size} denotes a customization point
-object\cxxiref{customization.point.object}.
+\ensures
+\tcode{*this} refers to the coroutine
+originally referred to be \tcode{that}, if any,
+and \tcode{that} refers to no coroutine.
+\end{itemdescr}
 
-\pnum
-\changed{The expression \tcode{ranges::size(E)} for some}{Given a} subexpression \tcode{E} with type
-\tcode{T} \changed{is expression-equivalent to:}{, let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
+\begin{itemdecl}
+~lazy();
+\end{itemdecl}
 
-\begin{itemize}
-\item
-  \added{If \tcode{T} is an array of unknown bound\cxxiref{dcl.array},
-  \tcode{ranges::size(E)} is ill-formed.}
+\begin{itemdescr}
+\expects
+The coroutine referred to by \tcode{*this}, if any, is suspended.
 
-\item
-  \tcode{\removed{\placeholdernc{decay-copy}(extent_v<T>)}} \added{Otherwise,} if \tcode{T} is an array
-  type\removed{\cxxiref{basic.compound}}\added{,
-  \tcode{ranges::size(E)} is expression-equivalent to }\tcode{\added{\placeholdernc{decay-copy}(extent_v<T>)}}.
-
-\item
-  \removed{Otherwise, if}
-  \tcode{\removed{disable_sized_range<remove_cv_t<T>>}}\removed{\cxxiref{range.sized}
-  is \tcode{false}:}
-
-\item
-  \added{Otherwise,} \removed{\tcode{\placeholdernc{decay-copy}(E.size())}}
-  if \removed{it} \tcode{\added{disable_sized_range<remove_cv_t<T>>}}\added{\cxxiref{range.sized}
-  is \tcode{false} and \tcode{\placeholdernc{decay-copy}(t.size())}}
-  is a valid expression \changed{and its}{of integer-like} type\removed{ \tcode{I}
-  is integer-like}\cxxiref{iterator.concept.winc}\added{,
-  \tcode{ranges::size(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(E.size())}}.
-
-\item
-  Otherwise, \removed{\tcode{\placeholdernc{decay-copy}(size(E))}} if \removed{it}
-  \added{\tcode{T} is a class or enumeration type,
-  }\tcode{\added{disable_sized_range<remove_cv_t<T>>}}\added{ is \tcode{false},
-  and }\tcode{\added{\placeholdernc{decay-copy}(size(t))}} is
-  a valid expression \changed{and its}{of integer-like} type \removed{\tcode{I}
-  is integer-like} with overload resolution performed in a context
-  \changed{that includes}{in which unqualified lookup for \tcode{size} finds only}
-  the declaration\changed{:}{s}
-\begin{codeblock}
-@\removed{template<class T> void size(T\&\&) = delete;}@
-@\added{void size(auto\&) = delete;}@
-@\added{void size(const auto\&) = delete;}@
-\end{codeblock}
-  \removed{and does not include a declaration of \tcode{ranges::size}}
-  \added{then \tcode{ranges::size(E)} is expression-equivalent
-  to \tcode{\placeholdernc{decay-copy}(size(E))} with overload resolution performed in the above context}.
-
-\item
-  Otherwise, \added{if} \tcode{\placeholdernc{make-unsigned-like}(ranges::end(\changed{E}{t}) - ranges::begin(\changed{E}{t}))}~(\changed{\cxxref{range.subrange}}{\cxxref{range.syn}})
-  \removed{if it} is a valid expression and
-  the types \tcode{I} and \tcode{S} of \tcode{ranges::begin(\changed{E}{t})} and
-  \tcode{ranges::end(\changed{E}{t})} (respectively) model both
-  \tcode{\libconcept{sized_sentinel_for}<S, I>}\cxxiref{iterator.concept.sizedsentinel} and
-  \tcode{\libconcept{forward_iterator}<I>}\added{,
-  then \tcode{ranges::size(E)} is expression-equivalent to
-  }\tcode{\added{\placeholdernc{make-unsigned-like}(ranges::end(t) - ranges::begin(t))}}.
-  \removed{However, \tcode{E} is evaluated only once.}
-
-\item
-  Otherwise, \tcode{ranges::size(E)} is ill-formed.
-\end{itemize}
-
-\pnum
-\begin{note}
-\changed{This case can}{Diagnosable ill-formed cases above}
-result in substitution failure when \tcode{ranges::size(E)}
-appears in the immediate context of a template instantiation.
-\end{note}
-
-\pnum
-\begin{note}
-Whenever \tcode{ranges::size(E)} is a valid expression, its
-type is integer-like.
-\end{note}
-
-\rSec2[range.prim.empty]{\tcode{ranges::empty}}
-\pnum
-The name \tcode{\added{ranges::}empty} denotes a customization point
-object\cxxiref{customization.point.object}.
-
-\pnum
-\changed{The expression \tcode{ranges::empty(E)} for some}{Given a} subexpression \tcode{E}
-\changed{is expression-equivalent to:}{with type \tcode{T}, let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
-
-\begin{itemize}
-\item
-  \added{If \tcode{T} is an array of unknown bound\cxxiref{basic.compound},
-  \tcode{ranges::empty(E)} is ill-formed.}
-
-\item
-  \added{Otherwise, if} \tcode{bool(\changed{(E)}{t}.empty())} \removed{if it} is a valid expression\added{,
-  \tcode{ranges::empty(E)} is expression-equivalent to \tcode{bool(t.empty())}}.
-
-\item
-  Otherwise, \added{if} \tcode{(ranges::size(\changed{E}{t}) == 0)} \removed{if it} is a valid expression\added{,
-  \tcode{ranges::empty(E)} is expression-equivalent to \tcode{(ranges::size(t) == 0)}}.
-
-\item
-  Otherwise, \changed{\tcode{EQ}, where \tcode{EQ} is}{if}
-  \tcode{bool(ranges::begin(\changed{E}{t}) == ranges::end(\changed{E}{t}))}
-  \removed{except that \tcode{E} is only evaluated once,}
-  \removed{if \tcode{EQ}} is a valid expression and
-  the type of \tcode{ranges::begin(\changed{E}{t})} models \libconcept{forward_iterator}\added{,
-  \tcode{ranges::empty(E)} is expression-equivalent to \tcode{bool(ranges::begin(t) == ranges::end(t))}}.
-
-\item
-  Otherwise, \tcode{ranges::empty(E)} is ill-formed.
-\end{itemize}
-
-\pnum
-\begin{note}
-\changed{This case can}{Diagnosable ill-formed cases above}
-result in substitution failure when \tcode{ranges::empty(E)}
-appears in the immediate context of a template instantiation.
-\end{note}
-
-\pnum
-\begin{note}
-Whenever \tcode{ranges::empty(E)} is a valid expression,
-it has type \tcode{bool}.
-\end{note}
-
-\rSec2[range.prim.data]{\tcode{ranges::data}}
-\pnum
-The name \tcode{\added{ranges::}data} denotes a customization point object\cxxiref{customization.point.object}.
-
-\pnum
-\changed{The expression \tcode{ranges::data(E)} for some}{Given a} subexpression \tcode{E}
-\changed{is expression-equivalent to:}{with type \tcode{T},
-let \tcode{t} be an lvalue that denotes the same object as \tcode{E} if \tcode{E} is a glvalue and otherwise denotes the result of applying the temporary materialization conversion\cxxiref{conv.rval} to \tcode{E}. Then:}
-
-\begin{itemize}
-\item
-  \added{If \tcode{E} is an rvalue and
-  }\tcode{\added{enable_safe_range<remove_cv_t<T>>}}\added{ is \tcode{false},
-  \tcode{ranges::data(E)} is ill-formed.}
-
-\item
-  \added{Otherwise, if \tcode{T} is an array type\cxxiref{basic.compound} and
-  }\tcode{\added{remove_all_extents_t<T>}}\added{ is an incomplete type,
-  \tcode{ranges::data(E)} is ill-formed with no diagnostic required.}
-
-\item
-  \changed{If \tcode{E} is an lvalue,}{Otherwise, if}
-  \tcode{\placeholdernc{decay-copy}(\changed{E}{t}.data())}
-  \removed{if it} is a valid expression of pointer to object type\added{,
-  \tcode{ranges::data(E)} is expression-equivalent to \tcode{\placeholdernc{decay-copy}(t.data())}}.
-
-\item
-  Otherwise, if \tcode{ranges::begin(\changed{E}{t})} is a valid expression
-  whose type models \libconcept{contiguous_iterator},
-  \added{\tcode{ranges::data(E)} is expresssion-equivalent to} \tcode{to_address(ranges::begin(E))}.
-
-\item
-  Otherwise, \tcode{ranges::data(E)} is ill-formed.
-\end{itemize}
-
-\pnum
-\begin{note}
-\changed{This case can}{Diagnosable ill-formed cases above}
-result in substitution failure when \tcode{ranges::data(E)}
-appears in the immediate context of a template instantiation.
-\end{note}
-
-\pnum
-\begin{note}
-Whenever \tcode{ranges::data(E)} is a valid expression, it
-has pointer to object type.
-\end{note}
+\effects
+Destroys the coroutine referred to by \tcode{*this}, if any.
+\end{itemdescr}
+} % \color{addclr}
