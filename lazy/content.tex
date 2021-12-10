@@ -1,10 +1,11 @@
 \begingroup
 \def\hd{\begin{tabular}{lll}
-          \textbf{Document Number:} & {\larger\docno}                 \\
-          \textbf{Date:}            & \reldate                        \\
-          \textbf{Audience:}        & Library Evolution Working Group \\
-          \textbf{Author:}          & Casey Carter                    \\
-          \textbf{Reply to:}        & casey@carter.net
+          \textbf{Document Number:} & {\larger\docno}                            \\
+          \textbf{Date:}            & \reldate                                   \\
+          \textbf{Audience:}        & Library Evolution Working Group            \\
+          \textbf{Author:}          & Casey Carter \tcode{<Casey@Carter.net>}    \\
+          \textbf{Author:}          & Gor Nishanov \tcode{<gorn@microsoft.com>}  \\
+        % \textbf{Author:}          & Lewis Baker \tcode{<lewisbaker@gmail.com>} \\
           \end{tabular}
 }
 \newlength{\hdwidth}
@@ -418,9 +419,11 @@ and \tcode{that} refers to no coroutine.
 \end{itemdecl}
 
 \begin{itemdescr}
+\pnum
 \expects
 The coroutine referred to by \tcode{*this}, if any, is suspended.
 
+\pnum
 \effects
 Destroys the coroutine referred to by \tcode{*this}, if any.
 \end{itemdescr}
