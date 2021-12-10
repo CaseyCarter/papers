@@ -1,3 +1,4 @@
+%!TEX root = std.tex
 % Definitions of table environments
 
 %%--------------------------------------------------
@@ -32,10 +33,8 @@
  \newcommand{\br}{\hfill\break}						% force newline within table entry
 
 %% column styles
- \newcolumntype{x}[1]{>{\raggedright\let\\=\tabularnewline}p{##1}}	% word-wrapped ragged-right
- 																	% column, width specified by #1
- % \newcolumntype{m}[1]{>{\CodeStyle}l{##1}}              % variable width column, all entries in CodeStyle
- \newcolumntype{m}[1]{l{##1}}							% variable width column, all entries in CodeStyle
+ \newcolumntype{x}[1]{>{\raggedright\let\\=\tabularnewline}p{##1}}      % word-wrapped ragged-right
+                                                                        % column, width specified by #1
 
   % do not number bullets within tables
   \renewcommand{\labelitemi}{---}
@@ -46,19 +45,11 @@
 {
 }
 
-% General Usage: TITLE is the title of the table, XREF is the
-% cross-reference for the table. LAYOUT is a sequence of column
-% type specifiers (e.g. cp{1.0}c), without '|' for the left edge
-% or right edge.
-
-% usage: \begin{floattablebase}{TITLE}{XREF}{COLUMNS}{PLACEMENT}
-% produces floating table, location determined within limits
-% by LaTeX.
-\newenvironment{floattablebase}[4]
+% floattablebase without TableBase, used for lib2dtab2base
+\newenvironment{floattablebasex}[4]
 {
- \begin{TableBase}
  \begin{table}[#4]
- \caption{\label{#2}#1}
+ \caption{\label{tab:#2}#1 \quad [tab:#2]}
  \begin{center}
  \begin{tabular}{|#3|}
 }
@@ -67,10 +58,28 @@
  \end{tabular}
  \end{center}
  \end{table}
+}
+
+
+% General Usage: TITLE is the title of the table, XREF is the
+% cross-reference for the table. LAYOUT is a sequence of column
+% type specifiers (e.g. cp{1.0}c), without '|' for the left edge
+% or right edge.
+
+% usage: \begin{floattablebase}{TITLE}{XREF}{LAYOUT}{PLACEMENT}
+% produces floating table, location determined within limits
+% by LaTeX.
+\newenvironment{floattablebase}[4]
+{
+ \begin{TableBase}
+ \begin{floattablebasex}{#1}{#2}{#3}{#4}
+}
+{
+ \end{floattablebasex}
  \end{TableBase}
 }
 
-% usage: \begin{floattable}{TITLE}{XREF}{COLUMNS}
+% usage: \begin{floattable}{TITLE}{XREF}{LAYOUT}
 % produces floating table, location determined within limits
 % by LaTeX.
 \newenvironment{floattable}[3]
@@ -93,7 +102,7 @@
  \end{tabular}
 }
 
-% usage: \begin{multicolfloattable}{TITLE}{XREF}{COLUMNS}
+% usage: \begin{multicolfloattable}{TITLE}{XREF}{LAYOUT}
 % produces floating table, location determined within limits
 % by LaTeX.
 \newenvironment{multicolfloattable}[3]
@@ -128,71 +137,68 @@
 % produces three-column table with column headers HDR1 and HDR2.
 % Used in "Library Categories" table in standard, and used as
 % base for other library summary tables.
-\newenvironment{libsumtabbase}[4]
+\newenvironment{libsumtabbase}[5]
 {
- \begin{floattable}{#1}{#2}{lll}
+ \begin{floattable}{#2}{#3}{ll#1}
  \topline
- \lhdrx{2}{#3}	&	\hdstyle{#4}	\\ \capsep
+ & \hdstyle{#4}	&	\hdstyle{#5}	\\ \capsep
 }
 {
  \end{floattable}
 }
 
-% usage: \begin{libsumtab}{TITLE}{XREF}
+% usage: \begin{libsumtab}[LASTCOLUMN]{TITLE}{XREF}
 % produces three-column table with column headers "Subclause" and "Header(s)".
 % Used in "C++ Headers for Freestanding Implementations" table in standard.
-\newenvironment{libsumtab}[2]
+\newenvironment{libsumtab}[3][l]
 {
- \begin{libsumtabbase}{#1}{#2}{Subclause}{Header(s)}
+ \begin{libsumtabbase}{#1}{#2}{#3}{Subclause}{Header}
 }
 {
  \end{libsumtabbase}
 }
 
-% usage: \begin{concepttable}{TITLE}{TAG}{LAYOUT}
+% usage: \begin{concepttable}{TITLE}{XREF}{LAYOUT}
 % produces table at current location
 \newenvironment{concepttable}[3]
 {
- \begin{TableBase}
- \begin{table}[!htb]
- \caption[#1]{\label{tab:#2}#1}
- \begin{center}
- \begin{tabular}{|#3|}
+ \begin{floattablebase}{#1}{#2}{#3}{!htb}
 }
 {
- \bottomline
- \end{tabular}
- \end{center}
- \end{table}
- \end{TableBase}
+ \end{floattablebase}
 }
 
-% usage: \begin{simpletypetable}{TITLE}{TAG}{LAYOUT}
+% usage: \begin{oldconcepttable}{NAME}{EXTRA}{XREF}{LAYOUT}
+% produces table at current location
+\newenvironment{oldconcepttable}[4]
+{
+ \indextext{\idxoldconcept{#1}}%
+ \begin{concepttable}{\oldconcept{#1} requirements#2}{#3}{#4}
+}
+{
+ \end{concepttable}
+}
+
+% usage: \begin{simpletypetable}{TITLE}{XREF}{LAYOUT}
 % produces table at current location
 \newenvironment{simpletypetable}[3]
 {
- \begin{TableBase}
- \begin{table}[!htb]
- \caption{#1}\label{#2}
- \begin{center}
- \begin{tabular}{|#3|}
+ \begin{floattablebase}{#1}{#2}{#3}{!htb}
 }
 {
- \bottomline
- \end{tabular}
- \end{center}
- \end{table}
- \end{TableBase}
+ \end{floattablebase}
 }
 
 % usage: \begin{LongTable}{TITLE}{XREF}{LAYOUT}
 % produces table that handles page breaks sensibly.
+% WARNING: Putting two of these on the same page
+% does not break sensibly. Avoid this for short tables.
 \newenvironment{LongTable}[3]
 {
  \newcommand{\continuedcaption}{\caption[]{#1 (continued)}}
  \begin{TableBase}
- \begin{longtable}
- {|#3|}\caption{#1}\label{#2}
+ \begin{longtable}{|#3|}
+ \caption{#1 \quad [tab:#2]}\label{tab:#2}
 }
 {
  \bottomline
@@ -213,6 +219,16 @@
 }
 {
  \end{LongTable}
+}
+
+\newenvironment{shortlibreqtab2}[2]
+{
+ \begin{floattable}
+ {#1}{#2}
+ {lx{.55\hsize}}
+}
+{
+ \end{floattable}
 }
 
 \newenvironment{libreqtab2a}[2]
@@ -285,14 +301,15 @@
  \end{LongTable}
 }
 
-\newenvironment{libreqtab4b}[2]
+\newenvironment{libreqtab4b}[3][LongTable]
 {
- \begin{LongTable}
- {#1}{#2}
+ \def\libreqtabenv{#1}
+ \begin{\libreqtabenv}
+ {#2}{#3}
  {x{.13\hsize}x{.15\hsize}x{.29\hsize}x{.27\hsize}}
 }
 {
- \end{LongTable}
+ \end{\libreqtabenv}
 }
 
 \newenvironment{libreqtab4c}[2]
@@ -422,18 +439,6 @@
  \end{LibEffTab}
 }
 
-% usage: \begin{libefftabvaluenarrow}{TITLE}{XREF}
-% produces a two-column effects table with right column
-% header "Value", width 1.5 in. Used in basic_string_view effects
-% tables in standard.
-\newenvironment{libefftabvaluenarrow}[2]
-{
- \begin{LibEffTab}{#1}{#2}{Value}{1.5in}
-}
-{
- \end{LibEffTab}
-}
-
 % Same as libefftabvalue except that it uses a long table and a
 % slightly wider column.
 \newenvironment{longlibefftabvalue}[2]
@@ -486,21 +491,17 @@
  \newcommand{\hdstyle}[1]{\textbf{##1}}
  \newcommand{\rowhdr}[1]{\hdstyle{##1}&}
  \newcommand{\colhdr}[1]{\multicolumn{1}{|>{\centering}m{#6}|}{\hdstyle{##1}}}
- %% FIXME: figure out a way to reuse floattable here
- \begin{table}[htbp]
- \caption{\label{#2}#1}
- \begin{center}
- \begin{tabular}{|>{\centering}m{#5}|@{}p{0.2\normalbaselineskip}@{}|m{#6}|m{#7}|}
+ \begin{floattablebasex}
+ {#1}{#2}
+ {>{\centering}m{#5}|@{}p{0.2\normalbaselineskip}@{}|m{#6}|m{#7} }
+ {htbp}
  %% table header
  \topline
  \multicolumn{1}{c}{}&&\colhdr{#3}&\colhdr{#4}\\
  \capsep
 }
 {
- \bottomline
- \end{tabular}
- \end{center}
- \end{table}
+ \end{floattablebasex}
 }
 
 \newenvironment{lib2dtab2}[4]{

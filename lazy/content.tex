@@ -1,9 +1,9 @@
 \begingroup
 \def\hd{\begin{tabular}{lll}
-          \textbf{Document Number:} & {\larger\docno}       \\
-          \textbf{Date:}            & \reldate              \\
-          \textbf{Audience:}        & Library Working Group \\
-          \textbf{Author:}          & Casey Carter          \\
+          \textbf{Document Number:} & {\larger\docno}                 \\
+          \textbf{Date:}            & \reldate                        \\
+          \textbf{Audience:}        & Library Evolution Working Group \\
+          \textbf{Author:}          & Casey Carter                    \\
           \textbf{Reply to:}        & casey@carter.net
           \end{tabular}
 }
@@ -19,14 +19,156 @@
 
 \vspace{0.5cm}
 
-\chapter{Abstract}
+\chapter{Overview}
 
-This paper began as a Proposed Resolution
-for GB275 ``\tcode{ranges::begin}/\tcode{end} should not accept arrays of unknown bound,''
-and grew to cover several problems with the range access customization point objects.
-Each problem is small enough to be addressed by an LWG issue,
-but as they are closely related (if not intertwined)
-it seems best to process them as a unit.
+The coroutines TS has introduced a language capability that allows functions to be suspended and later resumed. One of the key applications for this new feature is to make it easier to write asynchronous code. However, the coroutines TS itself does not include any concrete coroutine types that directly support writing asynchronous code.
+
+This paper proposes adding a new type, \tcode{std::lazy<T>}, to the standard library to enable creation and composition of coroutines representing asynchronous computation.
+
+\begin{note}
+SG1 wants to reserve the name \tcode{std::task} for something else. SG1 requested to pick a different name. LEWG chose \tcode{lazy}.
+\end{note}
+
+\begin{codeblock}
+#include <lazy>
+#include <string>
+
+struct record {
+  int id;
+  std::string name;
+  std::string description;
+};
+
+std::lazy<record> load_record(int id);
+std::lazy<> save_record(record r);
+
+std::lazy<void> modify_record() {
+  record r = co_await load_record(123);
+  r.description = "Look, ma, no blocking!";
+  co_await save_record(std::move(r));
+}
+\end{codeblock}
+
+The interface of lazy is intentionally minimal and designed for efficiency. In fact, the only operation you can do with the lazy is to await on it.
+
+\begin{codeblock}
+template <class T>
+class [[nodiscard]] lazy {
+public:
+  lazy(lazy&& that) noexcept;
+  ~lazy();
+  unspecified operator co_await(); // \expos
+};
+\end{codeblock}
+
+While such small interface may seem unusual at first, subsequent sections will clarify the rationale for this design.
+
+\section{Why not use futures with \tcode{future.then}?}
+
+The \tcode{std::future} type is inherently inefficient and cannot be used for efficient composition of asynchronous operations.
+The unavoidable overhead of futures is due to:
+\begin{itemize}
+\item allocation/deallocation of the shared state object,
+\item atomic increment/decrement for managing the lifetime of the shared state object,
+\item synchronization between setting of the result and getting the result, and
+\item (with \tcode{.then}) scheduling overhead of starting execution of subscribers to \tcode{.then}.
+\end{itemize}
+
+Consider the following example:
+\begin{codeblock}
+lazy<int> coro() {
+  int result = 0;
+  while (int v = co_await async_read())
+    result += v;
+  co_return result;
+}
+\end{codeblock}
+where \tcode{async_read()} is some asynchronous operation that takes, say, 4ns to perform.
+We would like to factor out the logic into two coroutines:
+\begin{codeblock}
+lazy<int> subtask() {
+  co_return co_await async_read();
+}
+
+lazy<int> coro_refactored() {
+  int result = 0;
+  while (int v = co_await subtask())
+    result += v;
+  co_return result;
+}
+\end{codeblock}
+
+Breaking a single \tcode{co_await} into its own function may seem silly, but it allows us to measure the overhead of composition of tasks. With the proposed \tcode{lazy}, our per-operation cost grew from 4ns to 6ns and did not incur any heap allocations. Moreover, this overhead of 2ns is not inherent to \tcode{lazy} and we anticipate that with improved coroutine optimization technology we will be able to drive the overhead close to zero.
+To estimate the cost of composition with \tcode{std::future}, we used the following code:
+\begin{codeblock}
+int fut_test() {
+  int count = 1'000'000;
+  int result = 0;
+
+  while (count > 0) {
+    promise p;
+    auto fut = p.get_future();
+    p.set_value(count--);
+    result += fut.get();
+  }
+  return result;
+}
+\end{codeblock}
+As measured on the same system (Linux, clang 6.0, libc++), we get \emph{133ns} per operation! Here is the visual illustration.
+
+\begin{tabular}{rl}
+        op cost: & ** \\
+  lazy overhead: & * \\
+future overhead: & ***************************************************************** \\
+\end{tabular}
+
+Being able to break apart bigger functions into a set of smaller ones and being able to compose software by putting together small pieces is fundamental requirement for a good software engineering since the 60s. The overhead of \tcode{std::future} and types similar in behavior makes them unsuitable as coroutine types.
+
+\subsubsection{Removing \tcode{future} overhead: Memory Allocation}
+
+Consider the only operation that is available on a \tcode{lazy}, namely, awaiting on it.
+\begin{codeblock}
+lazy<X> g();
+lazy<Y> f() {
+  // ...
+  X x = co_await g();
+  // ...
+}
+\end{codeblock}
+The caller coroutine \tcode{f} owns the lazy object for \tcode{g} that is created and destroyed at the end of the full expression containing \tcode{co_await}. This allows the compiler to determine the lifetime of the coroutine and apply Heap Allocation eLision Optimization~\cite{p0981r0}, which allocates a coroutine's state as if it were a local variable in its caller.
+
+\subsubsection{Removing \tcode{future} overhead: Reference counting}
+
+The coroutine state is not shared. The \tcode{lazy} type only allows moving pointer to a coroutine from one \tcode{lazy} object to another. Lifetime of a coroutine is linked to its \tcode{lazy} object, and the \tcode{lazy} object's destructor destroys the coroutine, thus, no reference counting is required.
+
+In a later section about cancellation we will cover the implications of this design decision.
+
+\subsubsection{Removing \tcode{future} overhead: Set/Get synchronization}
+
+The \tcode{lazy} coroutine always starts suspended. This allows not only to avoid synchronization when attaching a continuation, but also enables solving via composition how and where coroutine needs to get executed and allows to implement advanced execution strategies like continuation stealing.
+
+\subsubsection{Removing \tcode{future} overhead: Scheduling overhead}
+Consider the following code fragment:
+\begin{codeblock}
+int result = 0;
+while (int v = co_await async_read())
+  result += v;
+\end{codeblock}
+Let's say that \tcode{async_read} returns a \tcode{future}. That \tcode{future} cannot resume directly the coroutine that is awaiting on it as it will, in effect, transform the loop into unbounded recursion.
+
+On the other hand, coroutines have built-in support for symmetric coroutine transfer~\cite{p0913r1}. Since \tcode{lazy} object can only be created by a coroutine and the only way to get the result from a coroutine is by awaiting on it from another coroutine, the transfer of control from completing coroutine to awaiting coroutine is done in symmetric fashion, thus eliminating the need for extra scheduling interactions.
+
+\subsection{Destruction and cancellation}
+Note that the \tcode{lazy} type unconditionally destroys the coroutine in its destructor. It is safe to do, only if the coroutine has finished execution (at the final suspend point) or it is in a suspended state (waiting for some operation to complete), but, somehow, we know that the coroutine will never be resumed by the entity which was supposed to resume the coroutine on behalf of the operation that coroutine is awaiting upon. That is only possible if the underlying asynchronous facility support cancellation.
+
+We strongly believe that support for cancellation is a required facility for writing asynchronous code and we struggled for awhile trying to decide what is the source of the cancellation, whether it is the \tcode{lazy} that must initiate cancellation - and therefore every await in every coroutine needs to understand how to cancel a particular operation it is being awaited upon - or every async operation is tied to a particular lifetime and cancellation domain and operations are cancelled in bulk by cancellation of the entire cancellation domain~\cite{p0399r0}.
+
+We experimented with both approaches and reached the conclusion that not performing cancellation from the \tcode{lazy}, but, pushing it to the cancellation domain leads to more efficient implementation and is a simpler model for users.
+
+
+
+
+
 
 \chapter{Discussion}
 
