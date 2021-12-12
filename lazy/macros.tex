@@ -141,11 +141,11 @@
 \newcommand{\rSecindex}[2]{\section*{#2}\pdfbookmark[1]{#2}{pdf.idx.#1.#2}\label{idx.#1.#2}}
 
 % locations
-\newcommand{\indextext}[1]{\index[generalindex]{#1}}
-\newcommand{\indexlibrary}[1]{\index[libraryindex]{#1}}
-\newcommand{\indexhdr}[1]{\index[headerindex]{\idxhdr{#1}}}
-\newcommand{\indexconcept}[1]{\index[conceptindex]{#1}}
-\newcommand{\indexgram}[1]{\index[grammarindex]{#1}}
+\newcommand{\indextext}[1]{}
+\newcommand{\indexlibrary}[1]{}
+\newcommand{\indexhdr}[1]{}
+\newcommand{\indexconcept}[1]{}
+\newcommand{\indexgram}[1]{}
 
 % Collation helper: When building an index key, replace all macro definitions
 % in the key argument with a no-op for purposes of collation.
@@ -176,7 +176,6 @@
 \let\mname\omname%
 \let\Cpp\oCpp%
 \let\BreakableUnderscore\oBreakableUnderscore%
-\index[impldefindex]{\x@#1}%
 \let\grammarterm\ogrammarterm%
 \let\textup\otextup%
 }
