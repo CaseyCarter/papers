@@ -20,15 +20,55 @@
 
 \vspace{0.5cm}
 
-\chapter{Overview}
+\chapter*{Abstract}
 
-The coroutines TS has introduced a language capability that allows functions to be suspended and later resumed. One of the key applications for this new feature is to make it easier to write asynchronous code. However, the coroutines TS itself does not include any concrete coroutine types that directly support writing asynchronous code.
-
-This paper proposes adding a new type, \tcode{std::lazy<T>}, to the standard library to enable creation and composition of coroutines representing asynchronous computation.
+This paper proposes adding a new type,
+\tcode{std::lazy<T>}, to the standard library
+to enable creation and composition
+of coroutines representing asynchronous computation.
 
 \begin{note}
-SG1 wants to reserve the name \tcode{std::task} for something else. SG1 requested to pick a different name. LEWG chose \tcode{lazy}.
+SG1 wants to reserve the name \tcode{std::task} for another use.
+SG1 requested a different name, and LEWG chose \tcode{lazy}.
 \end{note}
+
+\chapter{Design}
+
+\section{Motivation}
+
+The Coroutines TS introduced a language capability
+that allows functions to be suspended and later resumed.
+One of the key applications for this new feature
+is to make it easier to write asynchronous code.
+However, the TS did not include any concrete coroutine types to do so.
+
+We believe it was a mistake to not include such a type in C++20,
+and it would be an even greater mistake not to include one in C++23.
+We further believe that the simple type presented here
+- which astute readers will notice
+has changed very little since P1056R1~\cite{P1056R1}) -
+is not ideal, but is the minimal useful type we can provide
+without presuming support for executors.
+
+As such, we do not provide any of the features
+desired for a lazy coroutine type to integrate with
+P2300's design for executors~\cite{P2300R3},
+despite having a list of requirements available.
+We think it best for WG21 to commit to having at least this minimal
+coroutine ``task'' support library in C++23,
+regardless of whether an executor proposal makes the C++23 train.
+There are coroutine users today who would benefit
+from a standardized coroutine task wrapper
+which they could incorporate into non-standard execution contexts
+even if WG21 doesn't ship executor support in C++23.
+
+We plan to write a followup paper with design changes to integrate
+\tcode{lazy} with P2300 (in collaboration with the authors of P2300)
+so that C++23 has \emph{some} type to represent coroutine tasks in any event,
+but the \emph{best} type to represent coroutine tasks if we also get
+P2300 \tcode{std::execution}.
+
+\subsection{Example code}
 
 \begin{codeblock}
 #include <lazy>
@@ -50,21 +90,29 @@ std::lazy<void> modify_record() {
 }
 \end{codeblock}
 
-The interface of lazy is intentionally minimal and designed for efficiency. In fact, the only operation you can do with the lazy is to await on it.
+\section{Proposal}
+
+The interface of lazy is intentionally minimal and designed for efficiency.
+In fact, the only operation you can do with the lazy is to await on it:
 
 \begin{codeblock}
-template<class T>
+template<class T, class Allocator = void>
 class [[nodiscard]] lazy {
 public:
   lazy(lazy&& that) noexcept;
+
   ~lazy();
-  unspecified operator co_await(); // \expos
+
+  @\unspec@ operator co_await();
+
+  T sync_await();
 };
 \end{codeblock}
 
-While such small interface may seem unusual at first, subsequent sections will clarify the rationale for this design.
+While such a small interface may seem unusual at first,
+subsequent sections will clarify the rationale for this design.
 
-\section{Why not use futures with \tcode{future.then}?}
+\subsection{Why not use futures with \tcode{future.then}?}
 
 The \tcode{std::future} type is inherently inefficient and cannot be used for efficient composition of asynchronous operations.
 The unavoidable overhead of futures is due to:
@@ -159,14 +207,14 @@ Let's say that \tcode{async_read} returns a \tcode{future}. That \tcode{future} 
 
 On the other hand, coroutines have built-in support for symmetric coroutine transfer~\cite{P0913R1}. Since \tcode{lazy} object can only be created by a coroutine and the only way to get the result from a coroutine is by awaiting on it from another coroutine, the transfer of control from completing coroutine to awaiting coroutine is done in symmetric fashion, thus eliminating the need for extra scheduling interactions.
 
-\subsection{Destruction and cancellation}
+\section{Destruction and cancellation}
 Note that the \tcode{lazy} type unconditionally destroys the coroutine in its destructor. It is safe to do, only if the coroutine has finished execution (at the final suspend point) or it is in a suspended state (waiting for some operation to complete), but, somehow, we know that the coroutine will never be resumed by the entity which was supposed to resume the coroutine on behalf of the operation that coroutine is awaiting upon. That is only possible if the underlying asynchronous facility support cancellation.
 
 We strongly believe that support for cancellation is a required facility for writing asynchronous code and we struggled for awhile trying to decide what is the source of the cancellation, whether it is the \tcode{lazy} that must initiate cancellation - and therefore every await in every coroutine needs to understand how to cancel a particular operation it is being awaited upon - or every async operation is tied to a particular lifetime and cancellation domain and operations are cancelled in bulk by cancellation of the entire cancellation domain~\cite{P0399R0}.
 
 We experimented with both approaches and reached the conclusion that not performing cancellation from the \tcode{lazy}, but, pushing it to the cancellation domain leads to more efficient implementation and is a simpler model for users.
 
-\subsection{Why no move assignment?}
+\section{Why no move assignment?}
 
 This is rather unorthodox decision and even authors of the paper did not completely agree on this topic. However, going with more restrictive model initially allows us to discover if the insight that lead to this decision was wrong. Initial design of the lazy, included move assignment, default constructor and swap. We removed them for two reasons.
 
@@ -176,66 +224,58 @@ Second: move-assignment of a lazy is a ticking bomb. To make it safe, we would n
 
 At the moment we do not offer a move assignment, default constructor and swap. If good use cases, for which there are no better ways to solve the same problem are discovered, we can add them.
 
-\subsection{Interaction with allocators}
+\section{Interaction with allocators}
 
-The implementation of coroutine bindings for lazy is required to treat the case where first parameter to a coroutine is of type \tcode{allocator_arg_t}. If that is the case, the coroutine needs to have at least two arguments and the second one shall satisfy the \oldconcept{Allocator} requirements and if dynamic allocation required to store the coroutine state, implementation should use provided allocator to allocate and deallocate the coroutine state. Examples:
-\begin{codeblock}
-lazy<int> f(int, float); // uses default allocator if needed
+\tcode{lazy} incorporates the work on coroutine allocators
+from P1681R0~\cite{P1681R0}. Described simply:
 
-lazy<int> f(allocator_arg_t, pmr::polymorphic_allocator<> a); // uses a to allocate, if needed
+\tcode{lazy}'s second template parameter \tcode{Allocator}
+can be used to statically declare an allocator type,
+or can be set to \tcode{void}, the default,
+to indicate that the allocator type is erased.
+An allocator may or may not be provided to the initial corouroutine call.
 
-template<class Alloc>
-lazy<int> f(allocator_arg_t, Alloc a); // uses allocator a to allocate. if needed
-\end{codeblock}
+If the coroutine has a first parameter of type \tcode{std::allocator_arg_t},
+the second argument \tcode{a} passed to the original call is:
+\begin{itemize}
+\item used to allocate the coroutine state,
+  if the statically declared allocator type is \tcode{void},
+\item converted to the statically-declared allocator type,
+  which is used to allocate the coroutine state, otherwise.
+\end{itemize}
+If the provided allocator is not convertible to a statically-declared
+non-\tcode{void} allocator type, the program is ill-formed.
 
-\subsection{Interaction with executors}
-Since coroutine starts suspended, it is up to the user to decide how it needs to get executed and where continuation needs to be scheduled.
+If the coroutine has no first parameter,
+or a first parameter with type other than \tcode{std::allocator_arg_t},
+the coroutine state is allocated with either
+a default-constructed allocator of the statically-declared allocator type,
+if it is not \tcode{void},
+or a default-constructed \tcode{std::allocator<byte>} otherwise.
+If the selected allocator type is not default-constructible,
+the program is ill-formed.
 
-Case 1: Starts in the current thread, resumes in the thread that triggered the completion of \tcode{f()}.
-\begin{codeblock}
-co_await f();
-\end{codeblock}
+The actual allocator used is stored type-erased within the coroutine state
+if it is not both default constructible and stateless,
+as indicated by \tcode{allocator_traits::is_always_equal}.
+A pointer to a deallocation function
+which can recover the erased allocator type
+is stored as well when the statically-declared allocator type is \tcode{void}.
 
-Case 2: Starts in the current thread, resumes on executor \tcode{ex}.
-\begin{codeblock}
-co_await f().via(ex);
-\end{codeblock}
-\begin{note}
-Member function via is not part of the lazy at the moment. We envision this as one possible way of how to express the desire to execute continuation in a different executor. For more details see P0975R0 that explores impact of coroutines on various existing proposals in flight~\cite{P0975R0}.
-\end{note}
+Deallocation of the coroutine state can then recover
+an allocator equivalent to the allocator
+used to allocate the coroutine state.
 
-Case 3: Starts by an executor \tcode{ex}, resumes in the thread that triggered the completion of \tcode{f()}.
-\begin{codeblock}
-co_await spawn(ex, f());
-\end{codeblock}
+\section{But how do we \emph{use} it?}
 
-Case 4: Starts by an executor \tcode{ex1}, resumes on executor \tcode{ex2}.
-\begin{codeblock}
-co_await spawn(ex1, f()).via(ex2);
-\end{codeblock}
+As we mentioned in the beginning, the only operation that one can do on a lazy is to await on it.Using an \grammarterm{await-expression} in a function turns it into a coroutine. But, this cannot go on forever, at some point, we have to interact with coroutine from a function that is not a coroutine itself, \tcode{main}, for example. What to do?
 
-The last case is only needed if \tcode{f()} cannot start executing in the current thread for some reason. We expect that this will not be a common case. Usually, when a coroutine has unusual requirements on where it needs to be executed it can be encoded directly in \tcode{f} without forcing the callers of \tcode{f} to do extra work. Typically, in this manner:
-\begin{codeblock}
-lazy<T> f() {
-  co_await make_sure_I_am_on_the_right_thread();
-  // ...
-}
-\end{codeblock}
-
-\subsection{But what about \tcode{main}?}
-As we mentioned in the beginning, the only operation that one can do on a lazy is to await on it (as if by \tcode{co_await} operator). Using an \grammarterm{await-expression} in a function turns it into a coroutine. But, this cannot go on forever, at some point, we have to interact with coroutine from a function that is not a coroutine itself, \tcode{main}, for example. What to do?
-
-There could be several functions that can bridge the gap between synchronous and asynchronous world. For example:
-\begin{codeblock}
-template<class T> T sync_await(lazy<T>);
-\end{codeblock}
-This function starts the lazy execution in the current thread, and, if it gets suspended, it blocks until the result is available. To simplify the signature, we show \tcode{sync_await} only taking objects of lazy type. This function can be written generically to handle arbitrary awaitables.
-
-Another function could be a variant of \tcode{std::async} that launches execution of a lazy on a thread pool and returns a future representing the result of the computation.
-\begin{codeblock}
-template<class T> T async(lazy<T>);
-\end{codeblock}
-One would use this version of \tcode{std::async} if blocking behavior of \tcode{sync_await} is undesirable.
+We provide a simple function to bridge the gap between synchronous and asynchronous worlds, \tcode{lazy::sync_await}. Calling \tcode{sync_await} starts the lazy execution in the current thread, and, if it gets suspended, blocks until the result is available.
+(This functionality could be extended to generically handle arbitrary awaitables;
+P2300 provides just such an implementation for generic senders,
+and machinery for adapting awaitables into senders.
+The future proposal integrating \tcode{lazy} with P2300 will undoubtedly
+remove this limited special-case function.)
 
 \subsection{Implementation experience}
 
@@ -250,9 +290,21 @@ from the working draft N4901~\cite{N4901} with change markings:
 \item \added{text to be added is ``green'' with underline}.
 \end{itemize}
 
+\setcounter{chapter}{17}
+\setcounter{section}{3}
+\setcounter{subsection}{1}
+\rSec2[version.syn]{Header \tcode{<version>} synopsis}
+
+\ednote{Add a new feature-test macro to the \tcode{<version>} synopsis,
+in the appropriate order,
+replacing \tcode{20XXYYL} with the year-and-month of merge:}
+
+\begin{codeblock}
+#define __cpp_lib_lazy                          20XXYYL // also in \tcode{<lazy>}
+\end{codeblock}
+
 \ednote{Add definitions to the \tcode{<coroutine>} synopsis:}
 
-\setcounter{chapter}{17}
 \setcounter{section}{12}
 \setcounter{subsection}{1}
 \rSec2[coroutine.syn]{Header \tcode{<coroutine>} synopsis}
@@ -347,9 +399,8 @@ to create coroutines representing asynchronous computations.
 \rSec3[lazy.syn]{Header \tcode{<lazy>} synopsis}
 \begin{codeblock}
 namespace std {
-  template<class T = void> class lazy;
-  template<class T> class lazy<T&>;
-  template<> class lazy<void>;
+  template<class T = void, class Allocator = void>
+  class lazy;
 }
 \end{codeblock}
 
@@ -360,47 +411,109 @@ a type for a coroutine lazy object
 that can be associated with
 a coroutine whose return type is
 \tcode{lazy<T>} for some type \tcode{T}.
-This subclause refers to such a coroutine as a lazy coroutine
-and to type \tcode{T} as the eventual type of a lazy coroutine.
+This subclause refers to such a coroutine as a \term{lazy coroutine}
+and to type \tcode{T} as the \term{eventual type} of the lazy coroutine.
 
 \begin{codeblock}
-template<class T>
+template<class T = void, class Allocator = void>
   class [[nodiscard]] lazy {
   public:
     lazy(lazy&& that) noexcept;
+
     ~lazy();
-    @\unspec@ operator co_await() &;
-    @\unspec@ operator co_await() &&;
+
+    @\unspec@ operator co_await();
+
+    T sync_await();
   };
 \end{codeblock}
 
 \pnum
+\mandates
+\tcode{T} denotes \tcode{void}, a reference type, or
+a \tcode{move_constructible} object type.
+
+\pnum
+\expects
+\tcode{Allocator} denotes \tcode{void} or meets
+the \oldconcept{Allocator} requirements\cxxiref{allocator.requirements.general}.
+
+\pnum
 The library provides specializations of \tcode{coroutine_traits}
-and implements \tcode{lazy}'s member overloads of \tcode{operator co_await}
+and implements \tcode{lazy}'s member \tcode{operator co_await}
 as necessary to provide the following behaviors.
 
 \pnum
-A call to a lazy coroutine \tcode{f} shall return a lazy object \tcode{t} associated with that coroutine. The called coroutine shall be suspended at the initial suspend point\cxxiref{dcl.fct.def.coroutine}. Such a lazy object is considered to be in the armed state.
-
-\pnum
-The type of a lazy object shall satisfy the \libconcept{awaitable} concept, and awaiting on a lazy object in the armed state as if by \tcode{co_await t}\cxxiref{expr.await} shall register the awaiting coroutine \tcode{a} with the lazy object \tcode{t} and resume the coroutine \tcode{f}. At this point \tcode{t} is considered to be in the launched state. Awaiting on a lazy object that is not in the armed state has undefined behavior.
-
-\pnum
-Let \tcode{sa} be a simple awaitable of \tcode{t}\iref{coroutine.awaitable}. If the compound-statement of the function-body of the coroutine \tcode{f} completes with an unhandled exception, the awaiting coroutine \tcode{a} is resumed and an expression \tcode{sa.await_resume()} shall rethrow that exception.
-
-\pnum
-If the eventual type of a coroutine \tcode{f} is \tcode{void} and the coroutine completes due to an execution of a coroutine return statement\cxxiref{stmt.return.coroutine}, or flowing off the end of a coroutine, the awaiting coroutine \tcode{a} is resumed and an expression \tcode{sa.await_resume()} shall evaluate to \tcode{void}.
-
-\pnum
-If the eventual type of a coroutine \tcode{f} is not \tcode{void} and the coroutine completes due to an execution of a coroutine return statement\cxxiref{stmt.return.coroutine}, the operand of the coroutine return statement shall be stored in the coroutine state and the awaiting coroutine \tcode{a} is resumed and an expression \tcode{sa.await_resume()} shall return the stored value if \tcode{t} is an rvalue or reference to a stored value, otherwise.
-
-\pnum
-If in the definition of the coroutine \tcode{g}, the first parameter has type \tcode{allocator_arg_t}, then the coroutine shall have at least two arguments and the type of the second parameter shall satisfy the \oldconcept{Allocator} requirements\cxxiref{allocator.requirements.general} and if dynamic allocation is required to store the coroutine state\cxxiref{dcl.fct.def.coroutine}, implementation shall use the provided allocator to allocate and deallocate the coroutine state.
+If, in the definition of a lazy coroutine,
+the first parameter has type \tcode{allocator_arg_t}, then
+the coroutine shall have at least two parameters
+and the type of the second shall meet
+the \oldconcept{Allocator} requirements.
+If dynamic allocation is required to store
+the coroutine state\cxxiref{dcl.fct.def.coroutine},
+the implementation uses the second argument either directly,
+if \tcode{Allocator} denotes \tcode{void},
+or indirectly, via conversion to \tcode{Allocator}
+if \tcode{Allocator} is non-void,
+to allocate and deallocate the coroutine state.
+The program is ill-formed if a provided allocator is not convertible as required.
+If no allocator is provided via arguments to the lazy coroutine,
+it uses a default-constructed \tcode{Allocator}, if non-\tcode{void}, or
+\tcode{allocator<byte>} otherwise.
+In any case, the implementation ensures that
+deallocation is performed with an allocator
+equivalent to the allocator used for allocation.
 
 \pnum
 If a \grammarterm{yield-expression}\cxxiref{expr.yield} occurs
-in the suspension context of the lazy coroutine,
+in the suspension context of a lazy coroutine,
 the program is ill-formed.
+
+\pnum
+A call to a lazy coroutine \tcode{f} returns
+a lazy object \tcode{t} associated with that coroutine.
+The coroutine is suspended at
+the initial suspend point\cxxiref{dcl.fct.def.coroutine}.
+Such a lazy object is considered to be in the \term{armed} state.
+
+\pnum
+The type of a lazy object models the \libconcept{awaitable} concept.
+Awaiting on a lazy object in the armed state
+as if by \tcode{co_await t}\cxxiref{expr.await}
+registers the awaiting coroutine \tcode{a}
+with the lazy object \tcode{t} and
+resume the associated coroutine \tcode{f}.
+At this point \tcode{t} is considered to no longer be in the \term{armed} state.
+Awaiting on a lazy object that is not in the armed state has undefined behavior.
+
+\pnum
+Let \tcode{sa} be a simple awaitable of \tcode{t}\iref{coroutine.awaitable}.
+If the \grammarterm{compound-statement} of the \grammarterm{function-body}
+of the coroutine \tcode{f} completes with an unhandled exception,
+the awaiting coroutine \tcode{a} is resumed and
+evaluation of \tcode{sa.await_resume()} rethrows that exception.
+
+\pnum
+If the eventual type of a coroutine \tcode{f} is \tcode{void}
+and the coroutine completes due to execution of
+a coroutine return statement\cxxiref{stmt.return.coroutine}, or
+flowing off the end of a coroutine,
+the awaiting coroutine \tcode{a} is resumed and
+evaluation of \tcode{sa.await_resume()} shall yield \tcode{void}.
+
+\pnum
+If the eventual type of a coroutine \tcode{f} is not \tcode{void} and
+the coroutine completes due to execution of a
+coroutine return statement\cxxiref{stmt.return.coroutine},
+the operand of the coroutine return statement is stored in the coroutine state,
+the awaiting coroutine \tcode{a} is resumed, and
+evaluation of \tcode{sa.await_resume()} shall yield the stored value.
+
+\begin{note}
+If the stored value is a glvalue, users should take care to ensure
+the lifetime of the denoted object is sufficient to guarantee validity of the
+glvalue yielded from \tcode{sa.await_resume()}.
+\end{note}
 
 \rSec3[coroutine.lazy.mem]{Members}
 \begin{itemdecl}
@@ -410,9 +523,9 @@ lazy(lazy&& that) noexcept;
 \begin{itemdescr}
 \pnum
 \ensures
-\tcode{*this} refers to the coroutine
-originally referred to be \tcode{that}, if any,
-and \tcode{that} refers to no coroutine.
+\tcode{*this} is associated with the coroutine
+originally associated with \tcode{that}, if any,
+and \tcode{that} is associated with no coroutine.
 \end{itemdescr}
 
 \begin{itemdecl}
@@ -422,10 +535,45 @@ and \tcode{that} refers to no coroutine.
 \begin{itemdescr}
 \pnum
 \expects
-The coroutine referred to by \tcode{*this}, if any, is suspended.
+The coroutine associated with \tcode{*this}, if any, is suspended.
 
 \pnum
 \effects
-Destroys the coroutine referred to by \tcode{*this}, if any.
+Destroys the coroutine associated with \tcode{*this}, if any.
+\end{itemdescr}
+
+\begin{itemdecl}
+@\unspec@ operator co_await();
+\end{itemdecl}
+
+\begin{itemdescr}
+\pnum
+\expects
+\tcode{*this} is associated with a coroutine
+suspended at its initial suspend point.
+
+\returns
+An object whose type models \libconcept{simple_awaitable}
+associated with the same coroutine as \tcode{*this}.
+\end{itemdescr}
+
+\begin{itemdecl}
+T sync_await();
+\end{itemdecl}
+
+\begin{itemdescr}
+\pnum
+\expects
+\tcode{*this} is associated with a coroutine
+suspended at its initial suspend point.
+
+\effects
+Evaluates \tcode{operator co_await()} to obtain
+the yielded \libconcept{simple_awaitable} object.
+If that object indicates via \tcode{await_ready} that
+the coroutine result is not yet ready,
+runs the coroutine to completion by calling \tcode{await_suspend}).
+Finally returns the coroutine result
+by evaluation of \tcode{await_resume}.
 \end{itemdescr}
 } % \color{addclr}
