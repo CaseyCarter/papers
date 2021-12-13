@@ -216,7 +216,7 @@ Let's say that \tcode{async_read} returns a \tcode{future}. That \tcode{future} 
 On the other hand, coroutines have built-in support for symmetric coroutine transfer~\cite{P0913R1}. Since \tcode{lazy} object can only be created by a coroutine and the only way to get the result from a coroutine is by awaiting on it from another coroutine, the transfer of control from completing coroutine to awaiting coroutine is done in symmetric fashion, thus eliminating the need for extra scheduling interactions.
 
 \section{Destruction and cancellation}
-Note that the \tcode{lazy} type unconditionally destroys the coroutine in its destructor. It is safe to do, only if the coroutine has finished execution (at the final suspend point) or it is in a suspended state (waiting for some operation to complete), but, somehow, we know that the coroutine will never be resumed by the entity which was supposed to resume the coroutine on behalf of the operation that coroutine is awaiting upon. That is only possible if the underlying asynchronous facility support cancellation.
+\tcode{lazy} destroys any associated coroutine in its destructor. It is safe to do, only if the coroutine has finished execution (at the final suspend point) or it is in a suspended state (waiting for some operation to complete), but, somehow, we know that the coroutine will never be resumed by the entity which was supposed to resume the coroutine on behalf of the operation that coroutine is awaiting upon. That is only possible if the underlying asynchronous facility support cancellation.
 
 We strongly believe that support for cancellation is a required facility for writing asynchronous code and we struggled for awhile trying to decide what is the source of the cancellation, whether it is the \tcode{lazy} that must initiate cancellation - and therefore every await in every coroutine needs to understand how to cancel a particular operation it is being awaited upon - or every async operation is tied to a particular lifetime and cancellation domain and operations are cancelled in bulk by cancellation of the entire cancellation domain~\cite{P0399R0}.
 
@@ -288,6 +288,9 @@ remove this limited special-case function.)
 \subsection{Implementation experience}
 
 A version of proposed type has been used in shipping software that runs on hundreds of million devices in consumer hands. Also, a similar type has been implemented in most extensive coroutine abstraction library CppCoro~\cite{CppCoro}. This proposed type is minimal and efficient and can be used to build higher level abstraction by composition.
+
+We've also made a Compiler Explorer implementation available for experimentation that works with the three major Standard Library implementations~\cite{IMPL}.
+
 
 \chapter{Wording}
 
