@@ -4,8 +4,6 @@
           \textbf{Date:}            & \reldate                                   \\
           \textbf{Audience:}        & Library Evolution Working Group            \\
           \textbf{Author:}          & Casey Carter \tcode{<Casey@Carter.net>}    \\
-          \textbf{Author:}          & Gor Nishanov \tcode{<gorn@microsoft.com>}  \\
-        % \textbf{Author:}          & Lewis Baker \tcode{<lewisbaker@gmail.com>} \\
           \end{tabular}
 }
 \newlength{\hdwidth}
@@ -19,6 +17,11 @@
 \end{center}
 
 \vspace{0.5cm}
+
+% TODO:
+% * See discussion of concepts at
+%   https://wiki.edg.com/bin/view/Wg21summer2020/P1288
+%   address, refute, or remove.
 
 \chapter*{Abstract}
 
@@ -70,9 +73,10 @@ P2300 \tcode{std::execution}.
 
 \subsection{Acknowledgements}
 
-The authors would like to thank Lewis Baker,
-whose contributions to P1056 \cite{P1056R1}
-were looted shamelessly for this proposal.
+The authors would like to thank Lewis Baker and Gor Nishanov,
+whose proposal
+P1056R1 ``Add lazy coroutine (coroutine task) type''~\cite{P1056R1}
+was looted shamelessly for this proposal.
 This paper is presented as a new revision of
 P1056 for continuity of design.
 
